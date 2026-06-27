@@ -23,6 +23,12 @@
 - 우선순위는 MapLibre 기반 지도, 서울/한국 지하철 네트워크 레이어, 이후 시뮬레이션과 운영 콘솔 순서다.
 - deck.gl은 대량 경로, trip, heatmap, arc, animation overlay가 필요해질 때 추가한다.
 - Three.js는 일반 지도 레이어로 다루기 어려운 HMI, 센서 시각화, point cloud, custom 3D object가 필요할 때 추가한다.
+- `useMemo`와 `useCallback`은 기본값으로 사용하지 않는다. 계산 비용이 크거나 참조 안정성이 실제 렌더링/구독 비용에 영향을 줄 때만 근거를 두고 사용한다.
+
+## 파일/디렉터리 네이밍
+
+- 새로 생성하는 파일과 디렉터리는 기본적으로 `kebab-case`를 사용한다.
+- React 컴포넌트를 담는 파일과 컴포넌트 모듈 이름도 예외 없이 `kebab-case`를 사용한다.
 
 ## 문서화
 
