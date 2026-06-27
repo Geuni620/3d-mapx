@@ -1,5 +1,3 @@
-export const MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/bright";
-
 export const SEOUL_CENTER = {
   longitude: 126.978,
   latitude: 37.5665,

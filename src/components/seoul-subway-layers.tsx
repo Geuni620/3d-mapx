@@ -22,14 +22,37 @@ export function SeoulSubwayLayers() {
       <Source id="seoul-subway-routes" type="geojson" data={routeGeoJson}>
         {SUBWAY_LINES.map((lineNumber) => (
           <Layer
-            key={`subway-route-${lineNumber}`}
-            id={`subway-route-${lineNumber}`}
+            key={`subway-route-glow-${lineNumber}`}
+            id={`subway-route-glow-${lineNumber}`}
             type="line"
             filter={["==", ["get", "lineNumber"], String(lineNumber)]}
+            layout={{
+              "line-cap": "round",
+              "line-join": "round",
+            }}
             paint={{
               "line-color": SUBWAY_LINE_COLORS[lineNumber],
-              "line-width": 4,
-              "line-opacity": 0.9,
+              "line-width": 12,
+              "line-blur": 8,
+              "line-opacity": 0.42,
+            }}
+          />
+        ))}
+
+        {SUBWAY_LINES.map((lineNumber) => (
+          <Layer
+            key={`subway-route-core-${lineNumber}`}
+            id={`subway-route-core-${lineNumber}`}
+            type="line"
+            filter={["==", ["get", "lineNumber"], String(lineNumber)]}
+            layout={{
+              "line-cap": "round",
+              "line-join": "round",
+            }}
+            paint={{
+              "line-color": SUBWAY_LINE_COLORS[lineNumber],
+              "line-width": 3.5,
+              "line-opacity": 0.96,
             }}
           />
         ))}
@@ -43,10 +66,10 @@ export function SeoulSubwayLayers() {
             type="circle"
             filter={["==", ["get", "lineNumber"], String(lineNumber)]}
             paint={{
-              "circle-color": SUBWAY_LINE_COLORS[lineNumber],
-              "circle-radius": 4,
-              "circle-stroke-color": "#ffffff",
-              "circle-stroke-width": 1.5,
+              "circle-color": "#050807",
+              "circle-radius": 3.8,
+              "circle-stroke-color": SUBWAY_LINE_COLORS[lineNumber],
+              "circle-stroke-width": 1.8,
             }}
           />
         ))}
