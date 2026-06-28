@@ -3,19 +3,19 @@ import { SUBWAY_LINES } from "./subway-constants";
 
 export function createSubwayRouteGeoJson(stations: SeoulSubwayStation[]) {
   return {
-    type: "FeatureCollection",
+    type: "FeatureCollection" as const,
     features: SUBWAY_LINES.map((lineNumber) => {
       const lineStations = stations.filter(
         (station) => station.lineNumber === lineNumber,
       );
 
       return {
-        type: "Feature",
+        type: "Feature" as const,
         properties: {
           lineNumber: String(lineNumber),
         },
         geometry: {
-          type: "LineString",
+          type: "LineString" as const,
           coordinates: lineStations.map((station) => [
             station.longitude,
             station.latitude,
@@ -28,9 +28,9 @@ export function createSubwayRouteGeoJson(stations: SeoulSubwayStation[]) {
 
 export function createSubwayStationGeoJson(stations: SeoulSubwayStation[]) {
   return {
-    type: "FeatureCollection",
+    type: "FeatureCollection" as const,
     features: stations.map((station) => ({
-      type: "Feature",
+      type: "Feature" as const,
       properties: {
         id: station.id,
         lineNumber: String(station.lineNumber),
@@ -38,7 +38,7 @@ export function createSubwayStationGeoJson(stations: SeoulSubwayStation[]) {
         name: station.name,
       },
       geometry: {
-        type: "Point",
+        type: "Point" as const,
         coordinates: [station.longitude, station.latitude],
       },
     })),

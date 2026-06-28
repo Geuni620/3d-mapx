@@ -20,6 +20,9 @@ importers:
       '@deck.gl/mapbox':
         specifier: ^9.3.5
         version: 9.3.5(@deck.gl/core@9.3.5)(@luma.gl/core@9.3.5)(@math.gl/web-mercator@4.1.0)
+      '@deck.gl/react':
+        specifier: ^9.3.5
+        version: 9.3.5(@deck.gl/core@9.3.5)(@deck.gl/widgets@9.3.5(@deck.gl/core@9.3.5)(@luma.gl/core@9.3.5))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -117,6 +120,20 @@ packages:
       '@luma.gl/gltf': ~9.3.3
       '@luma.gl/shadertools': ~9.3.3
 
+  '@deck.gl/react@9.3.5':
+    resolution: {integrity: sha512-C6NWSXI0bKQmiPCJ4qANmFzeKOu0ODkn6Houf6TH51/9ssJDT8+yAkZiA0/YsKiC74vwB8o2JjCZ0no98iy5rw==}
+    peerDependencies:
+      '@deck.gl/core': ~9.3.0
+      '@deck.gl/widgets': ~9.3.0
+      react: '>=16.3.0'
+      react-dom: '>=16.3.0'
+
+  '@deck.gl/widgets@9.3.5':
+    resolution: {integrity: sha512-0b7lgHmlkv96547KSvaQY8LDcfkCdYA9skS/dNw0SEYbN2cY1S/HbGF9IyeE4RnhqhH3kVJvi/LCPKpTlO9teA==}
+    peerDependencies:
+      '@deck.gl/core': ~9.3.0
+      '@luma.gl/core': ~9.3.3
+
   '@emnapi/core@1.11.1':
     resolution: {integrity: sha512-RSvbQmHzdKzNsLYa/wHrbc3KN4sYLKAdPZxqiM2HATqv/SBk2/ENSHpvXGaLOMcsAyz0poEGqkmmKYG3OWiJEQ==}
 
@@ -125,6 +142,15 @@ packages:
 
   '@emnapi/wasi-threads@1.2.2':
     resolution: {integrity: sha512-c95qOXkHdydNKhscBTebqEC1CVAZpyqOfVfBzQ1qgzyl3gfeldUjIggDbIZgDKsHLgnsM+igH7TJ/eAasaVuMA==}
+
+  '@floating-ui/core@1.7.5':
+    resolution: {integrity: sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ==}
+
+  '@floating-ui/dom@1.7.6':
+    resolution: {integrity: sha512-9gZSAI5XM36880PPMm//9dfiEngYoC6Am2izES1FF406YFsjvyBMmeJ2g4SAju3xWwtuynNRFL2s9hgxpLI5SQ==}
+
+  '@floating-ui/utils@0.2.11':
+    resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -1165,6 +1191,9 @@ packages:
   potpack@2.1.0:
     resolution: {integrity: sha512-pcaShQc1Shq0y+E7GqJqvZj8DTthWV1KeHGdi0Z6IAin2Oi3JnLCOfwnCo84qc+HAp52wT9nK9H7FAJp5a44GQ==}
 
+  preact@10.29.3:
+    resolution: {integrity: sha512-D9NL1GAnJZhc3RndVs4gDdxEeU9TcHgywMrhhOsnpdlvFjdbx0gAsLUnH6JEhlJH5giL7Tx5biWPUSEXE/HPzw==}
+
   process-nextick-args@2.0.1:
     resolution: {integrity: sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==}
 
@@ -1463,6 +1492,20 @@ snapshots:
       - '@75lb/nature'
       - '@loaders.gl/core'
 
+  '@deck.gl/react@9.3.5(@deck.gl/core@9.3.5)(@deck.gl/widgets@9.3.5(@deck.gl/core@9.3.5)(@luma.gl/core@9.3.5))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      '@deck.gl/core': 9.3.5
+      '@deck.gl/widgets': 9.3.5(@deck.gl/core@9.3.5)(@luma.gl/core@9.3.5)
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+
+  '@deck.gl/widgets@9.3.5(@deck.gl/core@9.3.5)(@luma.gl/core@9.3.5)':
+    dependencies:
+      '@deck.gl/core': 9.3.5
+      '@floating-ui/dom': 1.7.6
+      '@luma.gl/core': 9.3.5
+      preact: 10.29.3
+
   '@emnapi/core@1.11.1':
     dependencies:
       '@emnapi/wasi-threads': 1.2.2
@@ -1478,6 +1521,17 @@ snapshots:
     dependencies:
       tslib: 2.8.1
     optional: true
+
+  '@floating-ui/core@1.7.5':
+    dependencies:
+      '@floating-ui/utils': 0.2.11
+
+  '@floating-ui/dom@1.7.6':
+    dependencies:
+      '@floating-ui/core': 1.7.5
+      '@floating-ui/utils': 0.2.11
+
+  '@floating-ui/utils@0.2.11': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
@@ -2487,6 +2541,8 @@ snapshots:
       source-map-js: 1.2.1
 
   potpack@2.1.0: {}
+
+  preact@10.29.3: {}
 
   process-nextick-args@2.0.1: {}
 
