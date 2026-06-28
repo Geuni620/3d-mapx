@@ -30,14 +30,14 @@ export const SEOUL_TRANSIT_DARK_STYLE = {
       type: "fill",
       source: OPENMAPTILES_SOURCE,
       "source-layer": "landuse",
-      paint: { "fill-color": "#050806", "fill-opacity": 0.72 },
+      paint: { "fill-color": "#050806", "fill-opacity": 0.54 },
     },
     {
       id: "park",
       type: "fill",
       source: OPENMAPTILES_SOURCE,
       "source-layer": "park",
-      paint: { "fill-color": "#07120d", "fill-opacity": 0.8 },
+      paint: { "fill-color": "#07120d", "fill-opacity": 0.56 },
     },
     {
       id: "water",
@@ -70,7 +70,7 @@ export const SEOUL_TRANSIT_DARK_STYLE = {
       ],
       paint: {
         "line-color": "#15191a",
-        "line-opacity": ["interpolate", ["linear"], ["zoom"], 11, 0, 14, 0.75],
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], 11, 0, 14, 0.42],
         "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.3, 17, 2],
       },
     },
@@ -88,7 +88,7 @@ export const SEOUL_TRANSIT_DARK_STYLE = {
       ],
       paint: {
         "line-color": "#232827",
-        "line-opacity": 0.82,
+        "line-opacity": 0.52,
         "line-width": ["interpolate", ["linear"], ["zoom"], 9, 0.5, 16, 4],
       },
     },
@@ -100,7 +100,7 @@ export const SEOUL_TRANSIT_DARK_STYLE = {
       filter: ["==", ["get", "class"], "rail"],
       paint: {
         "line-color": "#343b3d",
-        "line-opacity": 0.72,
+        "line-opacity": 0.36,
         "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.4, 17, 1.8],
       },
     },
@@ -124,7 +124,7 @@ export const SEOUL_TRANSIT_DARK_STYLE = {
           ["get", "min_height"],
           0,
         ],
-        "fill-extrusion-opacity": 0.72,
+        "fill-extrusion-opacity": 0.5,
       },
     },
   ],
