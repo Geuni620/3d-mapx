@@ -25,7 +25,7 @@ export function SeoulSubwayLayers({ stations }: SeoulSubwayLayersProps) {
             "circle-color": "#050807",
             "circle-radius": 3.8,
             "circle-stroke-color": SUBWAY_LINE_COLORS[lineNumber],
-            "circle-stroke-width": 1.8,
+            "circle-stroke-width": 0.5,
           }}
         />
       ))}

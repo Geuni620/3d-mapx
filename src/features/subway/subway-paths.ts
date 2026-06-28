@@ -21,48 +21,59 @@ export function createSubwayRoutePathLayers(
 ): LayersList {
   const routePaths = createSubwayRoutePaths(stations);
 
+  const lineParameters = {
+    depthWriteEnabled: false,
+    depthCompare: "always" as const,
+  };
+
   return [
     new PathLayer<SubwayRoutePath>({
       id: "seoul-subway-route-aura",
       data: routePaths,
       getPath: (route) => route.path,
-      getColor: (route) => withAlpha(route.color, 52),
-      getWidth: 1,
+      getColor: (route) => withAlpha(route.color, 44),
+      getWidth: 10,
       widthUnits: "pixels",
-      widthMinPixels: 10,
+      widthMinPixels: 2,
+      widthMaxPixels: 10,
       capRounded: true,
       jointRounded: true,
       billboard: true,
       positionFormat: "XY",
       pickable: false,
+      parameters: lineParameters,
     }),
     new PathLayer<SubwayRoutePath>({
       id: "seoul-subway-route-body",
       data: routePaths,
       getPath: (route) => route.path,
       getColor: (route) => withAlpha(route.color, 210),
-      getWidth: 1,
+      getWidth: 4,
       widthUnits: "pixels",
-      widthMinPixels: 4,
+      widthMinPixels: 1.5,
+      widthMaxPixels: 5,
       capRounded: true,
       jointRounded: true,
       billboard: true,
       positionFormat: "XY",
       pickable: false,
+      parameters: lineParameters,
     }),
     new PathLayer<SubwayRoutePath>({
       id: "seoul-subway-route-highlight",
       data: routePaths,
       getPath: (route) => route.path,
-      getColor: (route) => withAlpha(route.highlightColor, 235),
-      getWidth: 1,
+      getColor: (route) => withAlpha(route.highlightColor, 180),
+      getWidth: 1.5,
       widthUnits: "pixels",
-      widthMinPixels: 1.5,
+      widthMinPixels: 0.8,
+      widthMaxPixels: 2,
       capRounded: true,
       jointRounded: true,
       billboard: true,
       positionFormat: "XY",
       pickable: false,
+      parameters: lineParameters,
     }),
   ];
 }
