@@ -6,15 +6,12 @@ import type {
 } from "../../services/subway-station";
 import { SUBWAY_LINE_COLORS, SUBWAY_LINES } from "./subway-constants";
 
-type RgbColor = [red: number, green: number, blue: number];
-type RgbaColor = [red: number, green: number, blue: number, alpha: number];
-
-type SubwayRoutePath = {
+interface SubwayRoutePath {
   lineNumber: SubwayLineNumber;
   path: [longitude: number, latitude: number][];
-  color: RgbColor;
-  highlightColor: RgbColor;
-};
+  color: [red: number, green: number, blue: number];
+  highlightColor: [red: number, green: number, blue: number];
+}
 
 export function createSubwayRoutePathLayers(
   stations: SeoulSubwayStation[],
@@ -104,7 +101,7 @@ function createSubwayRoutePaths(
   });
 }
 
-function hexToRgb(hexColor: string): RgbColor {
+function hexToRgb(hexColor: string): SubwayRoutePath["color"] {
   const normalizedColor = hexColor.replace("#", "");
 
   return [
@@ -114,10 +111,18 @@ function hexToRgb(hexColor: string): RgbColor {
   ];
 }
 
-function brightenRgb(color: RgbColor, amount: number): RgbColor {
-  return color.map((channel) => Math.min(channel + amount, 255)) as RgbColor;
+function brightenRgb(
+  color: SubwayRoutePath["color"],
+  amount: number,
+): SubwayRoutePath["color"] {
+  return color.map((channel) =>
+    Math.min(channel + amount, 255),
+  ) as SubwayRoutePath["color"];
 }
 
-function withAlpha(color: RgbColor, alpha: number): RgbaColor {
+function withAlpha(
+  color: SubwayRoutePath["color"],
+  alpha: number,
+): [red: number, green: number, blue: number, alpha: number] {
   return [...color, alpha];
 }

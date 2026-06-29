@@ -20,9 +20,9 @@ const subwayLineLegend = cva(
   },
 );
 
-type SubwayLineLegendProps = {
+interface SubwayLineLegendProps extends VariantProps<typeof subwayLineLegend> {
   className?: string;
-} & VariantProps<typeof subwayLineLegend>;
+}
 
 export function SubwayLineLegend({
   className,

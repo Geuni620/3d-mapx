@@ -6,7 +6,7 @@ const DEFAULT_PER_PAGE = 300;
 
 export type SubwayLineNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
-type SeoulSubwayStationApiRow = {
+interface SeoulSubwayStationApiRow {
   연번: number;
   호선: SubwayLineNumber;
   "고유역번호(외부역코드)": number;
@@ -15,18 +15,18 @@ type SeoulSubwayStationApiRow = {
   경도: string;
   작성일자: string;
   작성기준일: string;
-};
+}
 
-type SeoulSubwayStationsResponse = {
+interface SeoulSubwayStationsResponse {
   page: number;
   perPage: number;
   totalCount: number;
   currentCount: number;
   matchCount: number;
   data: SeoulSubwayStationApiRow[];
-};
+}
 
-export type SeoulSubwayStation = {
+export interface SeoulSubwayStation {
   id: number;
   lineNumber: SubwayLineNumber;
   sequence: number;
@@ -35,7 +35,7 @@ export type SeoulSubwayStation = {
   longitude: number;
   openedAt: string;
   referenceDate: string;
-};
+}
 
 export async function fetchSeoulSubwayStations(
   signal?: AbortSignal,

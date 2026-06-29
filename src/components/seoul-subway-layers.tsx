@@ -6,9 +6,9 @@ import {
 import { createSubwayStationGeoJson } from "../features/subway/subway-geojson";
 import type { SeoulSubwayStation } from "../services/subway-station";
 
-type SeoulSubwayLayersProps = {
+interface SeoulSubwayLayersProps {
   stations: SeoulSubwayStation[];
-};
+}
 
 export function SeoulSubwayLayers({ stations }: SeoulSubwayLayersProps) {
   const stationGeoJson = createSubwayStationGeoJson(stations);
