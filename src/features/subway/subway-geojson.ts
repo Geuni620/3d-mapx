@@ -1,5 +1,17 @@
-import type { SeoulSubwayStation } from "../../services/subway-station";
+import type {
+  SeoulSubwayStation,
+  SubwayLineNumber,
+} from "../../services/subway-station";
 import { SUBWAY_LINES } from "./subway-constants";
+
+export interface SubwayStationMapPoint {
+  id: number | string;
+  lineNumber: SubwayLineNumber;
+  sequence: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+}
 
 export function createSubwayRouteGeoJson(stations: SeoulSubwayStation[]) {
   return {
@@ -26,7 +38,7 @@ export function createSubwayRouteGeoJson(stations: SeoulSubwayStation[]) {
   };
 }
 
-export function createSubwayStationGeoJson(stations: SeoulSubwayStation[]) {
+export function createSubwayStationGeoJson(stations: SubwayStationMapPoint[]) {
   return {
     type: "FeatureCollection" as const,
     features: stations.map((station) => ({

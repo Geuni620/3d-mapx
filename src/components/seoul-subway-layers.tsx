@@ -3,11 +3,13 @@ import {
   SUBWAY_LINE_COLORS,
   SUBWAY_LINES,
 } from "../features/subway/subway-constants";
-import { createSubwayStationGeoJson } from "../features/subway/subway-geojson";
-import type { SeoulSubwayStation } from "../services/subway-station";
+import {
+  createSubwayStationGeoJson,
+  type SubwayStationMapPoint,
+} from "../features/subway/subway-geojson";
 
 interface SeoulSubwayLayersProps {
-  stations: SeoulSubwayStation[];
+  stations: SubwayStationMapPoint[];
 }
 
 export function SeoulSubwayLayers({ stations }: SeoulSubwayLayersProps) {

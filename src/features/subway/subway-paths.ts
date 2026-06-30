@@ -4,9 +4,11 @@ import type {
   SeoulSubwayStation,
   SubwayLineNumber,
 } from "../../services/subway-station";
-import { SUBWAY_LINE_COLORS, SUBWAY_LINES } from "./subway-constants";
+import { SEOUL_SUBWAY_OSM_NETWORK } from "./osm-subway-network";
+import { SUBWAY_LINE_COLORS } from "./subway-constants";
 
 interface SubwayRoutePath {
+  id: string;
   lineNumber: SubwayLineNumber;
   path: [longitude: number, latitude: number][];
   color: [red: number, green: number, blue: number];
@@ -15,8 +17,9 @@ interface SubwayRoutePath {
 
 export function createSubwayRoutePathLayers(
   stations: SeoulSubwayStation[],
+  selectedLineNumbers: SubwayLineNumber[],
 ): LayersList {
-  const routePaths = createSubwayRoutePaths(stations);
+  const routePaths = createSubwayRoutePaths(stations, selectedLineNumbers);
 
   const lineParameters = {
     depthWriteEnabled: false,
@@ -77,8 +80,26 @@ export function createSubwayRoutePathLayers(
 
 function createSubwayRoutePaths(
   stations: SeoulSubwayStation[],
+  selectedLineNumbers: SubwayLineNumber[],
 ): SubwayRoutePath[] {
-  return SUBWAY_LINES.flatMap((lineNumber) => {
+  return selectedLineNumbers.flatMap((lineNumber) => {
+    const color = hexToRgb(SUBWAY_LINE_COLORS[lineNumber]);
+    const osmRoutes = SEOUL_SUBWAY_OSM_NETWORK.routes.filter(
+      (route) => route.lineNumber === lineNumber,
+    );
+
+    if (osmRoutes.length > 0) {
+      return osmRoutes.flatMap((route) =>
+        route.pathSegments.map((pathSegment, index) => ({
+          id: `${route.id}-${index}`,
+          lineNumber,
+          path: pathSegment,
+          color,
+          highlightColor: brightenRgb(color, 72),
+        })),
+      );
+    }
+
     const lineStations = stations.filter(
       (station) => station.lineNumber === lineNumber,
     );
@@ -87,9 +108,8 @@ function createSubwayRoutePaths(
       return [];
     }
 
-    const color = hexToRgb(SUBWAY_LINE_COLORS[lineNumber]);
-
     return {
+      id: `line-${lineNumber}`,
       lineNumber,
       path: lineStations.map((station) => [
         station.longitude,
