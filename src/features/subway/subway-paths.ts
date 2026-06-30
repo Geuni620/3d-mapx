@@ -1,25 +1,26 @@
 import { PathLayer } from "@deck.gl/layers";
 import type { LayersList } from "@deck.gl/core";
-import type {
-  SeoulSubwayStation,
-  SubwayLineNumber,
-} from "../../services/subway-station";
-import { SEOUL_SUBWAY_OSM_NETWORK } from "./osm-subway-network";
-import { SUBWAY_LINE_COLORS } from "./subway-constants";
+import {
+  SEOUL_SUBWAY_OSM_NETWORK,
+  type SubwayCoordinate,
+} from "./osm-subway-network";
+import {
+  SUBWAY_LINE_COLORS,
+  type SubwayLineNumber,
+} from "./subway-constants";
 
 interface SubwayRoutePath {
   id: string;
   lineNumber: SubwayLineNumber;
-  path: [longitude: number, latitude: number][];
+  path: SubwayCoordinate[];
   color: [red: number, green: number, blue: number];
   highlightColor: [red: number, green: number, blue: number];
 }
 
 export function createSubwayRoutePathLayers(
-  stations: SeoulSubwayStation[],
   selectedLineNumbers: SubwayLineNumber[],
 ): LayersList {
-  const routePaths = createSubwayRoutePaths(stations, selectedLineNumbers);
+  const routePaths = createSubwayRoutePaths(selectedLineNumbers);
 
   const lineParameters = {
     depthWriteEnabled: false,
@@ -79,7 +80,6 @@ export function createSubwayRoutePathLayers(
 }
 
 function createSubwayRoutePaths(
-  stations: SeoulSubwayStation[],
   selectedLineNumbers: SubwayLineNumber[],
 ): SubwayRoutePath[] {
   return selectedLineNumbers.flatMap((lineNumber) => {
@@ -88,36 +88,15 @@ function createSubwayRoutePaths(
       (route) => route.lineNumber === lineNumber,
     );
 
-    if (osmRoutes.length > 0) {
-      return osmRoutes.flatMap((route) =>
-        route.pathSegments.map((pathSegment, index) => ({
-          id: `${route.id}-${index}`,
-          lineNumber,
-          path: pathSegment,
-          color,
-          highlightColor: brightenRgb(color, 72),
-        })),
-      );
-    }
-
-    const lineStations = stations.filter(
-      (station) => station.lineNumber === lineNumber,
+    return osmRoutes.flatMap((route) =>
+      route.pathSegments.map((pathSegment, index) => ({
+        id: `${route.id}-${index}`,
+        lineNumber,
+        path: pathSegment,
+        color,
+        highlightColor: brightenRgb(color, 72),
+      })),
     );
-
-    if (lineStations.length < 2) {
-      return [];
-    }
-
-    return {
-      id: `line-${lineNumber}`,
-      lineNumber,
-      path: lineStations.map((station) => [
-        station.longitude,
-        station.latitude,
-      ]),
-      color,
-      highlightColor: brightenRgb(color, 72),
-    };
   });
 }
 

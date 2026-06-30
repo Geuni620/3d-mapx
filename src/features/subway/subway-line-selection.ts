@@ -1,5 +1,7 @@
-import type { SubwayLineNumber } from "../../services/subway-station";
-import { SUBWAY_LINES } from "./subway-constants";
+import {
+  SUBWAY_LINES,
+  type SubwayLineNumber,
+} from "./subway-constants";
 
 export interface SubwayLineSelectionAction {
   type: "toggle" | "select-all" | "clear";

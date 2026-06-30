@@ -1,4 +1,4 @@
-import { Suspense, useReducer } from "react";
+import { useReducer } from "react";
 import { SeoulSubwayMap } from "../../components/seoul-subway-map";
 import { SubwayLineInspector } from "../../components/subway-line-inspector";
 import {
@@ -18,9 +18,7 @@ export function SeoulSubwayExplorer() {
 
   return (
     <div className="relative h-screen w-screen">
-      <Suspense fallback={null}>
-        <SeoulSubwayMap selectedLineNumbers={selectedLineNumbers} />
-      </Suspense>
+      <SeoulSubwayMap selectedLineNumbers={selectedLineNumbers} />
       <SubwayLineInspector
         className="absolute left-4 top-4 z-10"
         selectedLineNumberSet={selectedLineNumberSet}

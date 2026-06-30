@@ -1,6 +1,6 @@
-import type { SubwayLineNumber } from "../../services/subway-station";
-
 export const SUBWAY_LINES = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+
+export type SubwayLineNumber = (typeof SUBWAY_LINES)[number];
 
 export const SUBWAY_LINE_COLORS = {
   1: "#0052A4",
