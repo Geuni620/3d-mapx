@@ -54,11 +54,11 @@ Three.js는 이후 단계의 커스텀 3D 도구다. 앱에 HMI 패널, 센서�
    - sensor/telemetry mock stream.
    - 프로젝트가 system UI 방향으로 확장될 경우 향후 Electron 또는 kiosk-style HMI mode.
 
-## 후보 데이터 소스
+## 데이터 소스
 
-- 서울 열린데이터광장: 지하철 역 좌표, 실시간 도착 정보, 실시간 열차 위치.
-- data.go.kr: 국가 철도 및 도시철도 노선 데이터셋.
-- OpenStreetMap 또는 Overture Maps: 필요 시 basemap 주변 맥락 데이터.
+- OpenStreetMap: 1~8호선의 노선 geometry와 역사 좌표의 기준 데이터.
+
+1~8호선의 노선과 역사 좌표는 공공 API 좌표를 사용하지 않고 OpenStreetMap route master relation을 기준으로 관리한다.
 
 각 데이터 소스마다 다음을 기록한다.
 
