@@ -3,10 +3,10 @@ import { cva } from "class-variance-authority";
 import {
   SUBWAY_LINE_COLORS,
   SUBWAY_LINES,
+  type SubwayLineNumber,
 } from "../features/subway/subway-constants";
 import type { SubwayLineSelectionAction } from "../features/subway/subway-line-selection";
 import { cn } from "../lib/cn";
-import type { SubwayLineNumber } from "../services/subway-station";
 
 const subwayLineInspector = cva(
   "w-64 rounded-md border border-white/10 bg-zinc-950/80 p-3 text-zinc-100 shadow-lg shadow-black/25 backdrop-blur-md",

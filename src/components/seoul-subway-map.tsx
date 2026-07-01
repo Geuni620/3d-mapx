@@ -1,26 +1,20 @@
-import { use } from "react";
 import { DeckGL } from "@deck.gl/react";
 import Map from "react-map-gl/maplibre";
 import { INITIAL_VIEW_STATE } from "../app/map-config";
 import { SEOUL_TRANSIT_DARK_STYLE } from "../app/map-style";
+import { SEOUL_SUBWAY_OSM_NETWORK } from "../features/subway/osm-subway-network";
 import { createSubwayRoutePathLayers } from "../features/subway/subway-paths";
-import {
-  fetchSeoulSubwayStations,
-  type SeoulSubwayStation,
-  type SubwayLineNumber,
-} from "../services/subway-station";
+import type { SubwayStationMapPoint } from "../features/subway/subway-geojson";
+import type { SubwayLineNumber } from "../features/subway/subway-constants";
 import { SeoulSubwayLayers } from "./seoul-subway-layers";
-
-const subwayStationsPromise = fetchSeoulSubwayStations();
 
 interface SeoulSubwayMapProps {
   selectedLineNumbers: SubwayLineNumber[];
 }
 
 export function SeoulSubwayMap({ selectedLineNumbers }: SeoulSubwayMapProps) {
-  const stations = use(subwayStationsPromise);
-  const visibleStations = filterStationsByLine(stations, selectedLineNumbers);
-  const routeLayers = createSubwayRoutePathLayers(visibleStations);
+  const visibleStations = createVisibleSubwayStations(selectedLineNumbers);
+  const routeLayers = createSubwayRoutePathLayers(selectedLineNumbers);
 
   return (
     <DeckGL
@@ -36,11 +30,10 @@ export function SeoulSubwayMap({ selectedLineNumbers }: SeoulSubwayMapProps) {
   );
 }
 
-function filterStationsByLine(
-  stations: SeoulSubwayStation[],
+function createVisibleSubwayStations(
   selectedLineNumbers: SubwayLineNumber[],
-): SeoulSubwayStation[] {
-  return stations.filter((station) =>
+): SubwayStationMapPoint[] {
+  return SEOUL_SUBWAY_OSM_NETWORK.stations.filter((station) =>
     selectedLineNumbers.includes(station.lineNumber),
   );
 }
