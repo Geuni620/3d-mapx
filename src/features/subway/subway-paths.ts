@@ -4,10 +4,8 @@ import {
   SEOUL_SUBWAY_OSM_NETWORK,
   type SubwayCoordinate,
 } from "./osm-subway-network";
-import {
-  SUBWAY_LINE_COLORS,
-  type SubwayLineNumber,
-} from "./subway-constants";
+import { SUBWAY_STATION_LABEL_LAYER_ID } from "./subway-layer-ids";
+import { SUBWAY_LINE_COLORS, type SubwayLineNumber } from "./subway-constants";
 
 interface SubwayRoutePath {
   id: string;
@@ -15,6 +13,10 @@ interface SubwayRoutePath {
   path: SubwayCoordinate[];
   color: [red: number, green: number, blue: number];
   highlightColor: [red: number, green: number, blue: number];
+}
+
+interface SubwayRouteLayerProps {
+  beforeId?: string;
 }
 
 export function createSubwayRoutePathLayers(
@@ -28,8 +30,9 @@ export function createSubwayRoutePathLayers(
   };
 
   return [
-    new PathLayer<SubwayRoutePath>({
+    new PathLayer<SubwayRoutePath, SubwayRouteLayerProps>({
       id: "seoul-subway-route-aura",
+      beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
       data: routePaths,
       getPath: (route) => route.path,
       getColor: (route) => withAlpha(route.color, 44),
@@ -44,8 +47,9 @@ export function createSubwayRoutePathLayers(
       pickable: false,
       parameters: lineParameters,
     }),
-    new PathLayer<SubwayRoutePath>({
+    new PathLayer<SubwayRoutePath, SubwayRouteLayerProps>({
       id: "seoul-subway-route-body",
+      beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
       data: routePaths,
       getPath: (route) => route.path,
       getColor: (route) => withAlpha(route.color, 210),
@@ -60,8 +64,9 @@ export function createSubwayRoutePathLayers(
       pickable: false,
       parameters: lineParameters,
     }),
-    new PathLayer<SubwayRoutePath>({
+    new PathLayer<SubwayRoutePath, SubwayRouteLayerProps>({
       id: "seoul-subway-route-highlight",
+      beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
       data: routePaths,
       getPath: (route) => route.path,
       getColor: (route) => withAlpha(route.highlightColor, 180),
