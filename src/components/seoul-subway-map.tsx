@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import type { LayersList } from "@deck.gl/core";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import Map, { useControl, useMap } from "react-map-gl/maplibre";
@@ -8,6 +8,7 @@ import { SEOUL_SUBWAY_OSM_NETWORK } from "../features/subway/osm-subway-network"
 import {
   createSubwayDeckLayers,
   createSubwayDisplayStations,
+  type SubwayVisualLevel,
 } from "../features/subway/subway-paths";
 import type { SubwayStationMapPoint } from "../features/subway/subway-geojson";
 import type { SubwayLineNumber } from "../features/subway/subway-constants";
@@ -16,14 +17,30 @@ import { SeoulSubwayLayers } from "./seoul-subway-layers";
 
 interface SeoulSubwayMapProps {
   selectedLineNumbers: SubwayLineNumber[];
+  visualLevel: SubwayVisualLevel;
+  zoom: number;
+  onZoomChange: (zoom: number) => void;
 }
 
-export function SeoulSubwayMap({ selectedLineNumbers }: SeoulSubwayMapProps) {
-  const visibleStations = createVisibleSubwayStations(selectedLineNumbers);
-  const displayStations = createSubwayDisplayStations(visibleStations);
-  const subwayDeckLayers = createSubwayDeckLayers(
-    selectedLineNumbers,
-    displayStations,
+export function SeoulSubwayMap({
+  selectedLineNumbers,
+  visualLevel,
+  zoom,
+  onZoomChange,
+}: SeoulSubwayMapProps) {
+  const visibleStations = useMemo(
+    () => createVisibleSubwayStations(selectedLineNumbers),
+    [selectedLineNumbers],
+  );
+  const displayStations = useMemo(
+    () => createSubwayDisplayStations(visibleStations),
+    [visibleStations],
+  );
+  const visualLevelId = visualLevel.id;
+  const subwayDeckLayers = useMemo(
+    () =>
+      createSubwayDeckLayers(selectedLineNumbers, displayStations, visualLevel),
+    [displayStations, selectedLineNumbers, visualLevelId],
   );
 
   return (
@@ -31,6 +48,13 @@ export function SeoulSubwayMap({ selectedLineNumbers }: SeoulSubwayMapProps) {
       initialViewState={INITIAL_VIEW_STATE}
       mapStyle={SEOUL_TRANSIT_DARK_STYLE}
       style={{ width: "100%", height: "100%" }}
+      onMove={(event) => {
+        const nextZoom = Number(event.viewState.zoom.toFixed(2));
+
+        if (zoom !== nextZoom) {
+          onZoomChange(nextZoom);
+        }
+      }}
     >
       <SeoulSubwayLayers stations={displayStations} />
       <DeckRouteOverlay layers={subwayDeckLayers} />

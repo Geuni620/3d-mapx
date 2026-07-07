@@ -1,6 +1,8 @@
-import { useReducer } from "react";
+import { useMemo, useReducer, useState } from "react";
+import { INITIAL_VIEW_STATE } from "../../app/map-config";
 import { SeoulSubwayMap } from "../../components/seoul-subway-map";
 import { SubwayLineInspector } from "../../components/subway-line-inspector";
+import { createSubwayVisualLevel } from "./subway-paths";
 import {
   createInitialSelectedLineNumberSet,
   getSelectedLineNumbers,
@@ -13,12 +15,22 @@ export function SeoulSubwayExplorer() {
     undefined,
     createInitialSelectedLineNumberSet,
   );
+  const [zoom, setZoom] = useState(INITIAL_VIEW_STATE.zoom);
 
-  const selectedLineNumbers = getSelectedLineNumbers(selectedLineNumberSet);
+  const selectedLineNumbers = useMemo(
+    () => getSelectedLineNumbers(selectedLineNumberSet),
+    [selectedLineNumberSet],
+  );
+  const visualLevel = createSubwayVisualLevel(zoom);
 
   return (
     <div className="relative h-screen w-screen">
-      <SeoulSubwayMap selectedLineNumbers={selectedLineNumbers} />
+      <SeoulSubwayMap
+        selectedLineNumbers={selectedLineNumbers}
+        visualLevel={visualLevel}
+        zoom={zoom}
+        onZoomChange={setZoom}
+      />
       <SubwayLineInspector
         className="absolute left-4 top-4 z-10"
         selectedLineNumberSet={selectedLineNumberSet}
