@@ -32,6 +32,41 @@ interface SubwayStationCircleLayerProps {
   beforeId?: string;
 }
 
+interface SubwayLineStrokeStyle {
+  width: number;
+  minWidth: number;
+  maxWidth: number;
+  alpha: number;
+}
+
+interface SubwayStationDotStyle {
+  radius: number;
+  minRadius: number;
+  maxRadius: number;
+  alpha: number;
+}
+
+interface SubwayRouteVisualStyle {
+  glow: SubwayLineStrokeStyle;
+  aura: SubwayLineStrokeStyle;
+  body: SubwayLineStrokeStyle;
+  highlight: SubwayLineStrokeStyle;
+}
+
+interface SubwayStationCircleVisualStyle {
+  isVisible: boolean;
+  glow: SubwayStationDotStyle;
+  border: SubwayStationDotStyle;
+  gap: SubwayStationDotStyle;
+  core: SubwayStationDotStyle;
+  highlight: SubwayStationDotStyle;
+}
+
+interface SubwayVisualStyle {
+  route: SubwayRouteVisualStyle;
+  stationCircle: SubwayStationCircleVisualStyle;
+}
+
 interface ProjectedSubwayTrackPoint {
   coordinate: SubwayCoordinate;
   distanceMeters: number;
@@ -39,13 +74,59 @@ interface ProjectedSubwayTrackPoint {
   yMeters: number;
 }
 
+export interface SubwayVisualLevel {
+  id: "overview" | "network" | "station" | "inspection";
+  label: string;
+  zoomRangeLabel: string;
+  stationCircleLabel: string;
+}
+
+export function createSubwayVisualLevel(zoom: number): SubwayVisualLevel {
+  if (zoom <= 10.75) {
+    return {
+      id: "overview",
+      label: "Overview",
+      zoomRangeLabel: "10.75 이하",
+      stationCircleLabel: "숨김",
+    };
+  }
+
+  if (zoom <= 12.4) {
+    return {
+      id: "network",
+      label: "Network",
+      zoomRangeLabel: "10.75 - 12.4",
+      stationCircleLabel: "숨김",
+    };
+  }
+
+  if (zoom <= 14.5) {
+    return {
+      id: "station",
+      label: "Station",
+      zoomRangeLabel: "12.4 - 14.5",
+      stationCircleLabel: "표시",
+    };
+  }
+
+  return {
+    id: "inspection",
+    label: "Inspection",
+    zoomRangeLabel: "14.5 초과",
+    stationCircleLabel: "강조",
+  };
+}
+
 export function createSubwayDeckLayers(
   selectedLineNumbers: SubwayLineNumber[],
   stations: SubwayStationMapPoint[],
+  visualLevel: SubwayVisualLevel,
 ): LayersList {
+  const visualStyle = createSubwayVisualStyle(visualLevel);
+
   return [
-    ...createSubwayRoutePathLayers(selectedLineNumbers),
-    ...createSubwayStationCircleLayers(stations),
+    ...createSubwayRoutePathLayers(selectedLineNumbers, visualStyle.route),
+    ...createSubwayStationCircleLayers(stations, visualStyle.stationCircle),
   ];
 }
 
@@ -74,6 +155,7 @@ export function createSubwayDisplayStations(
 
 export function createSubwayRoutePathLayers(
   selectedLineNumbers: SubwayLineNumber[],
+  visualStyle: SubwayRouteVisualStyle,
 ): LayersList {
   const routePaths = createSubwayRoutePaths(selectedLineNumbers);
 
@@ -88,11 +170,11 @@ export function createSubwayRoutePathLayers(
       beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
       data: routePaths,
       getPath: (route) => route.path,
-      getColor: (route) => withAlpha(route.color, 24),
-      getWidth: 16,
+      getColor: (route) => withAlpha(route.color, visualStyle.glow.alpha),
+      getWidth: visualStyle.glow.width,
       widthUnits: "pixels",
-      widthMinPixels: 5,
-      widthMaxPixels: 18,
+      widthMinPixels: visualStyle.glow.minWidth,
+      widthMaxPixels: visualStyle.glow.maxWidth,
       capRounded: true,
       jointRounded: true,
       billboard: true,
@@ -105,11 +187,11 @@ export function createSubwayRoutePathLayers(
       beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
       data: routePaths,
       getPath: (route) => route.path,
-      getColor: (route) => withAlpha(route.color, 74),
-      getWidth: 9,
+      getColor: (route) => withAlpha(route.color, visualStyle.aura.alpha),
+      getWidth: visualStyle.aura.width,
       widthUnits: "pixels",
-      widthMinPixels: 3,
-      widthMaxPixels: 11,
+      widthMinPixels: visualStyle.aura.minWidth,
+      widthMaxPixels: visualStyle.aura.maxWidth,
       capRounded: true,
       jointRounded: true,
       billboard: true,
@@ -122,11 +204,11 @@ export function createSubwayRoutePathLayers(
       beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
       data: routePaths,
       getPath: (route) => route.path,
-      getColor: (route) => withAlpha(route.color, 230),
-      getWidth: 4.8,
+      getColor: (route) => withAlpha(route.color, visualStyle.body.alpha),
+      getWidth: visualStyle.body.width,
       widthUnits: "pixels",
-      widthMinPixels: 2.4,
-      widthMaxPixels: 5.4,
+      widthMinPixels: visualStyle.body.minWidth,
+      widthMaxPixels: visualStyle.body.maxWidth,
       capRounded: true,
       jointRounded: true,
       billboard: true,
@@ -139,11 +221,12 @@ export function createSubwayRoutePathLayers(
       beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
       data: routePaths,
       getPath: (route) => route.path,
-      getColor: (route) => withAlpha(route.highlightColor, 210),
-      getWidth: 1.2,
+      getColor: (route) =>
+        withAlpha(route.highlightColor, visualStyle.highlight.alpha),
+      getWidth: visualStyle.highlight.width,
       widthUnits: "pixels",
-      widthMinPixels: 0.7,
-      widthMaxPixels: 1.8,
+      widthMinPixels: visualStyle.highlight.minWidth,
+      widthMaxPixels: visualStyle.highlight.maxWidth,
       capRounded: true,
       jointRounded: true,
       billboard: true,
@@ -156,7 +239,12 @@ export function createSubwayRoutePathLayers(
 
 function createSubwayStationCircleLayers(
   stations: SubwayStationMapPoint[],
+  visualStyle: SubwayStationCircleVisualStyle,
 ): LayersList {
+  if (!visualStyle.isVisible) {
+    return [];
+  }
+
   const stationCircles = stations.map(
     (station): SubwayStationCircle => ({
       id: station.id,
@@ -178,11 +266,12 @@ function createSubwayStationCircleLayers(
       beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
       data: stationCircles,
       getPosition: (station) => [station.longitude, station.latitude],
-      getFillColor: (station) => withAlpha(station.color, 28),
-      getRadius: 5.7,
+      getFillColor: (station) =>
+        withAlpha(station.color, visualStyle.glow.alpha),
+      getRadius: visualStyle.glow.radius,
       radiusUnits: "pixels",
-      radiusMinPixels: 2.8,
-      radiusMaxPixels: 6.4,
+      radiusMinPixels: visualStyle.glow.minRadius,
+      radiusMaxPixels: visualStyle.glow.maxRadius,
       stroked: false,
       filled: true,
       pickable: false,
@@ -193,11 +282,12 @@ function createSubwayStationCircleLayers(
       beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
       data: stationCircles,
       getPosition: (station) => [station.longitude, station.latitude],
-      getFillColor: (station) => withAlpha(station.color, 235),
-      getRadius: 4.4,
+      getFillColor: (station) =>
+        withAlpha(station.color, visualStyle.border.alpha),
+      getRadius: visualStyle.border.radius,
       radiusUnits: "pixels",
-      radiusMinPixels: 2.4,
-      radiusMaxPixels: 5,
+      radiusMinPixels: visualStyle.border.minRadius,
+      radiusMaxPixels: visualStyle.border.maxRadius,
       stroked: false,
       filled: true,
       pickable: false,
@@ -208,11 +298,11 @@ function createSubwayStationCircleLayers(
       beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
       data: stationCircles,
       getPosition: (station) => [station.longitude, station.latitude],
-      getFillColor: [3, 16, 10, 248],
-      getRadius: 3.35,
+      getFillColor: [3, 16, 10, visualStyle.gap.alpha],
+      getRadius: visualStyle.gap.radius,
       radiusUnits: "pixels",
-      radiusMinPixels: 1.8,
-      radiusMaxPixels: 3.85,
+      radiusMinPixels: visualStyle.gap.minRadius,
+      radiusMaxPixels: visualStyle.gap.maxRadius,
       stroked: false,
       filled: true,
       pickable: false,
@@ -223,11 +313,11 @@ function createSubwayStationCircleLayers(
       beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
       data: stationCircles,
       getPosition: (station) => [station.longitude, station.latitude],
-      getFillColor: [245, 255, 249, 252],
-      getRadius: 2.2,
+      getFillColor: [245, 255, 249, visualStyle.core.alpha],
+      getRadius: visualStyle.core.radius,
       radiusUnits: "pixels",
-      radiusMinPixels: 1.1,
-      radiusMaxPixels: 2.65,
+      radiusMinPixels: visualStyle.core.minRadius,
+      radiusMaxPixels: visualStyle.core.maxRadius,
       stroked: false,
       filled: true,
       pickable: false,
@@ -238,11 +328,11 @@ function createSubwayStationCircleLayers(
       beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
       data: stationCircles,
       getPosition: (station) => [station.longitude, station.latitude],
-      getFillColor: [255, 255, 255, 220],
-      getRadius: 0.85,
+      getFillColor: [255, 255, 255, visualStyle.highlight.alpha],
+      getRadius: visualStyle.highlight.radius,
       radiusUnits: "pixels",
-      radiusMinPixels: 0.42,
-      radiusMaxPixels: 1.05,
+      radiusMinPixels: visualStyle.highlight.minRadius,
+      radiusMaxPixels: visualStyle.highlight.maxRadius,
       stroked: false,
       filled: true,
       pickable: false,
@@ -511,6 +601,106 @@ function createCoordinateMidpoint(
     (firstCoordinate[0] + secondCoordinate[0]) / 2,
     (firstCoordinate[1] + secondCoordinate[1]) / 2,
   ];
+}
+
+function createSubwayVisualStyle(
+  visualLevel: SubwayVisualLevel,
+): SubwayVisualStyle {
+  switch (visualLevel.id) {
+    case "overview":
+      return {
+        route: {
+          glow: { width: 4.2, minWidth: 1, maxWidth: 5, alpha: 14 },
+          aura: { width: 3, minWidth: 0.8, maxWidth: 3.6, alpha: 42 },
+          body: { width: 1.45, minWidth: 0.6, maxWidth: 1.8, alpha: 205 },
+          highlight: {
+            width: 0.35,
+            minWidth: 0.15,
+            maxWidth: 0.45,
+            alpha: 120,
+          },
+        },
+        stationCircle: createHiddenStationCircleStyle(),
+      };
+
+    case "network":
+      return {
+        route: {
+          glow: { width: 5.2, minWidth: 1.1, maxWidth: 5.8, alpha: 16 },
+          aura: { width: 3.5, minWidth: 0.9, maxWidth: 4.1, alpha: 48 },
+          body: { width: 1.75, minWidth: 0.75, maxWidth: 2.15, alpha: 216 },
+          highlight: { width: 0.4, minWidth: 0.18, maxWidth: 0.52, alpha: 135 },
+        },
+        stationCircle: createHiddenStationCircleStyle(),
+      };
+
+    case "station":
+      return {
+        route: {
+          glow: { width: 4.8, minWidth: 1.2, maxWidth: 5.6, alpha: 14 },
+          aura: { width: 3.6, minWidth: 1, maxWidth: 4.2, alpha: 48 },
+          body: { width: 1.95, minWidth: 0.85, maxWidth: 2.35, alpha: 214 },
+          highlight: {
+            width: 0.45,
+            minWidth: 0.2,
+            maxWidth: 0.58,
+            alpha: 138,
+          },
+        },
+        stationCircle: {
+          isVisible: true,
+          glow: { radius: 5.7, minRadius: 2.8, maxRadius: 6.4, alpha: 28 },
+          border: { radius: 4.4, minRadius: 2.4, maxRadius: 5, alpha: 235 },
+          gap: { radius: 3.35, minRadius: 1.8, maxRadius: 3.85, alpha: 248 },
+          core: { radius: 2.2, minRadius: 1.1, maxRadius: 2.65, alpha: 252 },
+          highlight: {
+            radius: 0.85,
+            minRadius: 0.42,
+            maxRadius: 1.05,
+            alpha: 220,
+          },
+        },
+      };
+
+    case "inspection":
+      return {
+        route: {
+          glow: { width: 2.2, minWidth: 0.8, maxWidth: 2.8, alpha: 6 },
+          aura: { width: 1.8, minWidth: 0.65, maxWidth: 2.3, alpha: 22 },
+          body: { width: 0.95, minWidth: 0.45, maxWidth: 1.25, alpha: 178 },
+          highlight: {
+            width: 0.18,
+            minWidth: 0.08,
+            maxWidth: 0.28,
+            alpha: 78,
+          },
+        },
+        stationCircle: {
+          isVisible: true,
+          glow: { radius: 6.3, minRadius: 3.6, maxRadius: 7, alpha: 18 },
+          border: { radius: 5.4, minRadius: 3, maxRadius: 6.1, alpha: 238 },
+          gap: { radius: 4.25, minRadius: 2.4, maxRadius: 4.85, alpha: 250 },
+          core: { radius: 2.65, minRadius: 1.45, maxRadius: 3.15, alpha: 252 },
+          highlight: {
+            radius: 0.95,
+            minRadius: 0.5,
+            maxRadius: 1.15,
+            alpha: 218,
+          },
+        },
+      };
+  }
+}
+
+function createHiddenStationCircleStyle(): SubwayStationCircleVisualStyle {
+  return {
+    isVisible: false,
+    glow: { radius: 0, minRadius: 0, maxRadius: 0, alpha: 0 },
+    border: { radius: 0, minRadius: 0, maxRadius: 0, alpha: 0 },
+    gap: { radius: 0, minRadius: 0, maxRadius: 0, alpha: 0 },
+    core: { radius: 0, minRadius: 0, maxRadius: 0, alpha: 0 },
+    highlight: { radius: 0, minRadius: 0, maxRadius: 0, alpha: 0 },
+  };
 }
 
 const LATITUDE_DEGREE_METERS = 111_320;
