@@ -32,6 +32,13 @@ interface SubwayStationCircleLayerProps {
   beforeId?: string;
 }
 
+interface ProjectedSubwayTrackPoint {
+  coordinate: SubwayCoordinate;
+  distanceMeters: number;
+  xMeters: number;
+  yMeters: number;
+}
+
 export function createSubwayDeckLayers(
   selectedLineNumbers: SubwayLineNumber[],
   stations: SubwayStationMapPoint[],
@@ -40,6 +47,29 @@ export function createSubwayDeckLayers(
     ...createSubwayRoutePathLayers(selectedLineNumbers),
     ...createSubwayStationCircleLayers(stations),
   ];
+}
+
+export function createSubwayDisplayStations(
+  stations: SubwayStationMapPoint[],
+): SubwayStationMapPoint[] {
+  const routePathsByLineNumber = createSubwayRoutePathsByLineNumber(stations);
+
+  return stations.map((station) => {
+    const displayCoordinate = createSubwayStationDisplayCoordinate(
+      station,
+      routePathsByLineNumber.get(station.lineNumber) ?? [],
+    );
+
+    if (displayCoordinate === undefined) {
+      return station;
+    }
+
+    return {
+      ...station,
+      longitude: displayCoordinate[0],
+      latitude: displayCoordinate[1],
+    };
+  });
 }
 
 export function createSubwayRoutePathLayers(
@@ -241,6 +271,253 @@ function createSubwayRoutePaths(
     );
   });
 }
+
+function createSubwayRoutePathsByLineNumber(
+  stations: SubwayStationMapPoint[],
+): Map<SubwayLineNumber, SubwayRoutePath[]> {
+  const routePathsByLineNumber = new Map<
+    SubwayLineNumber,
+    SubwayRoutePath[]
+  >();
+
+  stations.forEach((station) => {
+    if (routePathsByLineNumber.has(station.lineNumber)) {
+      return;
+    }
+
+    routePathsByLineNumber.set(
+      station.lineNumber,
+      createSubwayRoutePaths([station.lineNumber]),
+    );
+  });
+
+  return routePathsByLineNumber;
+}
+
+function createSubwayStationDisplayCoordinate(
+  station: SubwayStationMapPoint,
+  routePaths: SubwayRoutePath[],
+): SubwayCoordinate | undefined {
+  const projectedTrackPoints = findNearbyProjectedTrackPoints(
+    station,
+    routePaths,
+  );
+
+  if (projectedTrackPoints.length < 2) {
+    return undefined;
+  }
+
+  const displayEndpoints = findFarthestProjectedTrackPointPair(
+    projectedTrackPoints,
+  );
+
+  if (displayEndpoints === undefined) {
+    return undefined;
+  }
+
+  return createCoordinateMidpoint(
+    displayEndpoints[0].coordinate,
+    displayEndpoints[1].coordinate,
+  );
+}
+
+function findNearbyProjectedTrackPoints(
+  station: SubwayStationMapPoint,
+  routePaths: SubwayRoutePath[],
+): ProjectedSubwayTrackPoint[] {
+  const projectedTrackPoints = routePaths
+    .map((routePath) => findClosestProjectedTrackPoint(station, routePath.path))
+    .filter(
+      (
+        projectedTrackPoint,
+      ): projectedTrackPoint is ProjectedSubwayTrackPoint =>
+        projectedTrackPoint !== undefined,
+    )
+    .filter(
+      (projectedTrackPoint) =>
+        projectedTrackPoint.distanceMeters <=
+        STATION_DISPLAY_SEARCH_RADIUS_METERS,
+    )
+    .sort(
+      (firstProjectedTrackPoint, secondProjectedTrackPoint) =>
+        firstProjectedTrackPoint.distanceMeters -
+        secondProjectedTrackPoint.distanceMeters,
+    );
+
+  return projectedTrackPoints.reduce<ProjectedSubwayTrackPoint[]>(
+    (distinctProjectedTrackPoints, projectedTrackPoint) => {
+      const hasDuplicate = distinctProjectedTrackPoints.some(
+        (distinctProjectedTrackPoint) =>
+          calculateProjectedPointDistanceMeters(
+            projectedTrackPoint,
+            distinctProjectedTrackPoint,
+          ) < STATION_DISPLAY_POINT_MERGE_DISTANCE_METERS,
+      );
+
+      if (hasDuplicate) {
+        return distinctProjectedTrackPoints;
+      }
+
+      return [...distinctProjectedTrackPoints, projectedTrackPoint];
+    },
+    [],
+  );
+}
+
+function findClosestProjectedTrackPoint(
+  station: SubwayStationMapPoint,
+  path: SubwayCoordinate[],
+): ProjectedSubwayTrackPoint | undefined {
+  return path.slice(0, -1).reduce<ProjectedSubwayTrackPoint | undefined>(
+    (closestProjectedTrackPoint, coordinate, index) => {
+      const projectedTrackPoint = projectStationToSegment(
+        station,
+        coordinate,
+        path[index + 1],
+      );
+
+      if (
+        closestProjectedTrackPoint !== undefined &&
+        closestProjectedTrackPoint.distanceMeters <=
+          projectedTrackPoint.distanceMeters
+      ) {
+        return closestProjectedTrackPoint;
+      }
+
+      return projectedTrackPoint;
+    },
+    undefined,
+  );
+}
+
+function projectStationToSegment(
+  station: SubwayStationMapPoint,
+  startCoordinate: SubwayCoordinate,
+  endCoordinate: SubwayCoordinate,
+): ProjectedSubwayTrackPoint {
+  const startPoint = projectCoordinateToStationMeters(startCoordinate, station);
+  const endPoint = projectCoordinateToStationMeters(endCoordinate, station);
+  const segmentX = endPoint.xMeters - startPoint.xMeters;
+  const segmentY = endPoint.yMeters - startPoint.yMeters;
+  const segmentLengthSquared = segmentX * segmentX + segmentY * segmentY;
+
+  if (segmentLengthSquared === 0) {
+    return {
+      coordinate: startCoordinate,
+      distanceMeters: Math.hypot(startPoint.xMeters, startPoint.yMeters),
+      xMeters: startPoint.xMeters,
+      yMeters: startPoint.yMeters,
+    };
+  }
+
+  const projectionRatio = Math.max(
+    0,
+    Math.min(
+      1,
+      -(startPoint.xMeters * segmentX + startPoint.yMeters * segmentY) /
+        segmentLengthSquared,
+    ),
+  );
+  const xMeters = startPoint.xMeters + segmentX * projectionRatio;
+  const yMeters = startPoint.yMeters + segmentY * projectionRatio;
+
+  return {
+    coordinate: unprojectStationMetersToCoordinate(xMeters, yMeters, station),
+    distanceMeters: Math.hypot(xMeters, yMeters),
+    xMeters,
+    yMeters,
+  };
+}
+
+function projectCoordinateToStationMeters(
+  coordinate: SubwayCoordinate,
+  station: SubwayStationMapPoint,
+): { xMeters: number; yMeters: number } {
+  return {
+    xMeters:
+      (coordinate[0] - station.longitude) *
+      getLongitudeDegreeMeters(station.latitude),
+    yMeters: (coordinate[1] - station.latitude) * LATITUDE_DEGREE_METERS,
+  };
+}
+
+function unprojectStationMetersToCoordinate(
+  xMeters: number,
+  yMeters: number,
+  station: SubwayStationMapPoint,
+): SubwayCoordinate {
+  return [
+    station.longitude + xMeters / getLongitudeDegreeMeters(station.latitude),
+    station.latitude + yMeters / LATITUDE_DEGREE_METERS,
+  ];
+}
+
+function getLongitudeDegreeMeters(latitude: number): number {
+  return LATITUDE_DEGREE_METERS * Math.cos((latitude * Math.PI) / 180);
+}
+
+function findFarthestProjectedTrackPointPair(
+  projectedTrackPoints: ProjectedSubwayTrackPoint[],
+): [ProjectedSubwayTrackPoint, ProjectedSubwayTrackPoint] | undefined {
+  let farthestProjectedTrackPointPair:
+    | [ProjectedSubwayTrackPoint, ProjectedSubwayTrackPoint]
+    | undefined;
+  let farthestDistanceMeters = 0;
+
+  projectedTrackPoints.forEach((firstProjectedTrackPoint, firstIndex) => {
+    projectedTrackPoints
+      .slice(firstIndex + 1)
+      .forEach((secondProjectedTrackPoint) => {
+        const distanceMeters = calculateProjectedPointDistanceMeters(
+          firstProjectedTrackPoint,
+          secondProjectedTrackPoint,
+        );
+
+        if (distanceMeters > farthestDistanceMeters) {
+          farthestDistanceMeters = distanceMeters;
+          farthestProjectedTrackPointPair = [
+            firstProjectedTrackPoint,
+            secondProjectedTrackPoint,
+          ];
+        }
+      });
+  });
+
+  if (
+    farthestDistanceMeters < STATION_DISPLAY_MIN_TRACK_GAP_METERS ||
+    farthestDistanceMeters > STATION_DISPLAY_MAX_TRACK_GAP_METERS
+  ) {
+    return undefined;
+  }
+
+  return farthestProjectedTrackPointPair;
+}
+
+function calculateProjectedPointDistanceMeters(
+  firstProjectedTrackPoint: ProjectedSubwayTrackPoint,
+  secondProjectedTrackPoint: ProjectedSubwayTrackPoint,
+): number {
+  return Math.hypot(
+    firstProjectedTrackPoint.xMeters - secondProjectedTrackPoint.xMeters,
+    firstProjectedTrackPoint.yMeters - secondProjectedTrackPoint.yMeters,
+  );
+}
+
+function createCoordinateMidpoint(
+  firstCoordinate: SubwayCoordinate,
+  secondCoordinate: SubwayCoordinate,
+): SubwayCoordinate {
+  return [
+    (firstCoordinate[0] + secondCoordinate[0]) / 2,
+    (firstCoordinate[1] + secondCoordinate[1]) / 2,
+  ];
+}
+
+const LATITUDE_DEGREE_METERS = 111_320;
+const STATION_DISPLAY_SEARCH_RADIUS_METERS = 95;
+const STATION_DISPLAY_MIN_TRACK_GAP_METERS = 2;
+const STATION_DISPLAY_MAX_TRACK_GAP_METERS = 180;
+const STATION_DISPLAY_POINT_MERGE_DISTANCE_METERS = 1;
 
 function hexToRgb(hexColor: string): SubwayRoutePath["color"] {
   const normalizedColor = hexColor.replace("#", "");
