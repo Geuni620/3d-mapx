@@ -6,6 +6,7 @@ import {
 } from "./osm-subway-network";
 import { SUBWAY_STATION_LABEL_LAYER_ID } from "./subway-layer-ids";
 import type { SubwayStationMapPoint } from "./subway-geojson";
+import type { SubwayLayerVisibility } from "./subway-layer-visibility";
 import { SUBWAY_LINE_COLORS, type SubwayLineNumber } from "./subway-constants";
 
 interface SubwayRoutePath {
@@ -120,13 +121,18 @@ export function createSubwayVisualLevel(zoom: number): SubwayVisualLevel {
 export function createSubwayDeckLayers(
   selectedLineNumbers: SubwayLineNumber[],
   stations: SubwayStationMapPoint[],
+  layerVisibility: SubwayLayerVisibility,
   visualLevel: SubwayVisualLevel,
 ): LayersList {
   const visualStyle = createSubwayVisualStyle(visualLevel);
 
   return [
-    ...createSubwayRoutePathLayers(selectedLineNumbers, visualStyle.route),
-    ...createSubwayStationCircleLayers(stations, visualStyle.stationCircle),
+    ...(layerVisibility.isRouteLayerVisible
+      ? createSubwayRoutePathLayers(selectedLineNumbers, visualStyle.route)
+      : []),
+    ...(layerVisibility.isStationCircleLayerVisible
+      ? createSubwayStationCircleLayers(stations, visualStyle.stationCircle)
+      : []),
   ];
 }
 
