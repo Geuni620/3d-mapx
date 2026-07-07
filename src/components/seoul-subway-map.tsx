@@ -5,7 +5,7 @@ import Map, { useControl, useMap } from "react-map-gl/maplibre";
 import { INITIAL_VIEW_STATE } from "../app/map-config";
 import { SEOUL_TRANSIT_DARK_STYLE } from "../app/map-style";
 import { SEOUL_SUBWAY_OSM_NETWORK } from "../features/subway/osm-subway-network";
-import { createSubwayRoutePathLayers } from "../features/subway/subway-paths";
+import { createSubwayDeckLayers } from "../features/subway/subway-paths";
 import type { SubwayStationMapPoint } from "../features/subway/subway-geojson";
 import type { SubwayLineNumber } from "../features/subway/subway-constants";
 import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-ids";
@@ -17,7 +17,10 @@ interface SeoulSubwayMapProps {
 
 export function SeoulSubwayMap({ selectedLineNumbers }: SeoulSubwayMapProps) {
   const visibleStations = createVisibleSubwayStations(selectedLineNumbers);
-  const routeLayers = createSubwayRoutePathLayers(selectedLineNumbers);
+  const subwayDeckLayers = createSubwayDeckLayers(
+    selectedLineNumbers,
+    visibleStations,
+  );
 
   return (
     <Map
@@ -26,7 +29,7 @@ export function SeoulSubwayMap({ selectedLineNumbers }: SeoulSubwayMapProps) {
       style={{ width: "100%", height: "100%" }}
     >
       <SeoulSubwayLayers stations={visibleStations} />
-      <DeckRouteOverlay layers={routeLayers} />
+      <DeckRouteOverlay layers={subwayDeckLayers} />
     </Map>
   );
 }
