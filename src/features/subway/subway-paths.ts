@@ -1,10 +1,11 @@
-import { PathLayer } from "@deck.gl/layers";
+import { PathLayer, ScatterplotLayer } from "@deck.gl/layers";
 import type { LayersList } from "@deck.gl/core";
 import {
   SEOUL_SUBWAY_OSM_NETWORK,
   type SubwayCoordinate,
 } from "./osm-subway-network";
 import { SUBWAY_STATION_LABEL_LAYER_ID } from "./subway-layer-ids";
+import type { SubwayStationMapPoint } from "./subway-geojson";
 import { SUBWAY_LINE_COLORS, type SubwayLineNumber } from "./subway-constants";
 
 interface SubwayRoutePath {
@@ -17,6 +18,28 @@ interface SubwayRoutePath {
 
 interface SubwayRouteLayerProps {
   beforeId?: string;
+}
+
+interface SubwayStationCircle {
+  id: number | string;
+  lineNumber: SubwayLineNumber;
+  longitude: number;
+  latitude: number;
+  color: [red: number, green: number, blue: number];
+}
+
+interface SubwayStationCircleLayerProps {
+  beforeId?: string;
+}
+
+export function createSubwayDeckLayers(
+  selectedLineNumbers: SubwayLineNumber[],
+  stations: SubwayStationMapPoint[],
+): LayersList {
+  return [
+    ...createSubwayRoutePathLayers(selectedLineNumbers),
+    ...createSubwayStationCircleLayers(stations),
+  ];
 }
 
 export function createSubwayRoutePathLayers(
@@ -97,6 +120,103 @@ export function createSubwayRoutePathLayers(
       positionFormat: "XY",
       pickable: false,
       parameters: lineParameters,
+    }),
+  ];
+}
+
+function createSubwayStationCircleLayers(
+  stations: SubwayStationMapPoint[],
+): LayersList {
+  const stationCircles = stations.map(
+    (station): SubwayStationCircle => ({
+      id: station.id,
+      lineNumber: station.lineNumber,
+      longitude: station.longitude,
+      latitude: station.latitude,
+      color: hexToRgb(SUBWAY_LINE_COLORS[station.lineNumber]),
+    }),
+  );
+
+  const circleParameters = {
+    depthWriteEnabled: false,
+    depthCompare: "always" as const,
+  };
+
+  return [
+    new ScatterplotLayer<SubwayStationCircle, SubwayStationCircleLayerProps>({
+      id: "seoul-subway-station-glow",
+      beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
+      data: stationCircles,
+      getPosition: (station) => [station.longitude, station.latitude],
+      getFillColor: (station) => withAlpha(station.color, 28),
+      getRadius: 5.7,
+      radiusUnits: "pixels",
+      radiusMinPixels: 2.8,
+      radiusMaxPixels: 6.4,
+      stroked: false,
+      filled: true,
+      pickable: false,
+      parameters: circleParameters,
+    }),
+    new ScatterplotLayer<SubwayStationCircle, SubwayStationCircleLayerProps>({
+      id: "seoul-subway-station-border",
+      beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
+      data: stationCircles,
+      getPosition: (station) => [station.longitude, station.latitude],
+      getFillColor: (station) => withAlpha(station.color, 235),
+      getRadius: 4.4,
+      radiusUnits: "pixels",
+      radiusMinPixels: 2.4,
+      radiusMaxPixels: 5,
+      stroked: false,
+      filled: true,
+      pickable: false,
+      parameters: circleParameters,
+    }),
+    new ScatterplotLayer<SubwayStationCircle, SubwayStationCircleLayerProps>({
+      id: "seoul-subway-station-gap",
+      beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
+      data: stationCircles,
+      getPosition: (station) => [station.longitude, station.latitude],
+      getFillColor: [3, 16, 10, 248],
+      getRadius: 3.35,
+      radiusUnits: "pixels",
+      radiusMinPixels: 1.8,
+      radiusMaxPixels: 3.85,
+      stroked: false,
+      filled: true,
+      pickable: false,
+      parameters: circleParameters,
+    }),
+    new ScatterplotLayer<SubwayStationCircle, SubwayStationCircleLayerProps>({
+      id: "seoul-subway-station-core",
+      beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
+      data: stationCircles,
+      getPosition: (station) => [station.longitude, station.latitude],
+      getFillColor: [245, 255, 249, 252],
+      getRadius: 2.2,
+      radiusUnits: "pixels",
+      radiusMinPixels: 1.1,
+      radiusMaxPixels: 2.65,
+      stroked: false,
+      filled: true,
+      pickable: false,
+      parameters: circleParameters,
+    }),
+    new ScatterplotLayer<SubwayStationCircle, SubwayStationCircleLayerProps>({
+      id: "seoul-subway-station-highlight",
+      beforeId: SUBWAY_STATION_LABEL_LAYER_ID,
+      data: stationCircles,
+      getPosition: (station) => [station.longitude, station.latitude],
+      getFillColor: [255, 255, 255, 220],
+      getRadius: 0.85,
+      radiusUnits: "pixels",
+      radiusMinPixels: 0.42,
+      radiusMaxPixels: 1.05,
+      stroked: false,
+      filled: true,
+      pickable: false,
+      parameters: circleParameters,
     }),
   ];
 }
