@@ -35,6 +35,7 @@ export function SeoulSubwayMap({
     () => createVisibleSubwayStations(selectedLineNumbers),
     [selectedLineNumbers],
   );
+  // OSM 역사 노드는 노선 geometry와 어긋날 수 있어, 라벨/마커에는 보정 좌표를 사용한다.
   const displayStations = useMemo(
     () => createSubwayDisplayStations(visibleStations),
     [visibleStations],
