@@ -82,6 +82,9 @@ export interface SubwayVisualLevel {
   stationCircleLabel: string;
 }
 
+/**
+ * @description 지도 zoom을 렌더링 단계로 나눠 노선 두께와 역사 circle 크기를 조정한다.
+ */
 export function createSubwayVisualLevel(zoom: number): SubwayVisualLevel {
   if (zoom <= 10.75) {
     return {
@@ -136,6 +139,9 @@ export function createSubwayDeckLayers(
   ];
 }
 
+/**
+ * @description 역사 마커를 주변 노선 경로로 보정해 보통 상하행 선로 사이 중앙에 놓는다.
+ */
 export function createSubwayDisplayStations(
   stations: SubwayStationMapPoint[],
 ): SubwayStationMapPoint[] {
@@ -440,6 +446,7 @@ function findNearbyProjectedTrackPoints(
         secondProjectedTrackPoint.distanceMeters,
     );
 
+  // 같은 선로에서 나온 거의 동일한 projection point는 하나로 합쳐 후보를 정리한다.
   return projectedTrackPoints.reduce<ProjectedSubwayTrackPoint[]>(
     (distinctProjectedTrackPoints, projectedTrackPoint) => {
       const hasDuplicate = distinctProjectedTrackPoints.some(
@@ -491,6 +498,7 @@ function projectStationToSegment(
   startCoordinate: SubwayCoordinate,
   endCoordinate: SubwayCoordinate,
 ): ProjectedSubwayTrackPoint {
+  // 역 주변 로컬 meter 좌표계에서 투영해 거리 비교가 가능하도록 한다.
   const startPoint = projectCoordinateToStationMeters(startCoordinate, station);
   const endPoint = projectCoordinateToStationMeters(endCoordinate, station);
   const segmentX = endPoint.xMeters - startPoint.xMeters;
@@ -506,6 +514,7 @@ function projectStationToSegment(
     };
   }
 
+  // route segment 위에서 역사 좌표와 가장 가까운 점의 위치 비율을 구한다.
   const projectionRatio = Math.max(
     0,
     Math.min(
@@ -552,6 +561,9 @@ function getLongitudeDegreeMeters(latitude: number): number {
   return LATITUDE_DEGREE_METERS * Math.cos((latitude * Math.PI) / 180);
 }
 
+/**
+ * @description 가까운 projection 후보 중 가장 벌어진 두 점을 선로 양쪽 후보로 보고 선택한다.
+ */
 function findFarthestProjectedTrackPointPair(
   projectedTrackPoints: ProjectedSubwayTrackPoint[],
 ): [ProjectedSubwayTrackPoint, ProjectedSubwayTrackPoint] | undefined {
