@@ -17,6 +17,8 @@ status: implemented
 
 구현은 완료했다. 체크되지 않은 항목은 현재 vertical slice 이후의 장시간·다중 카메라 시각 QA와 service-day 경계 연속성 후속 검증이다.
 
+> 2026-07-10 후속 변경: 시간대별 speed profile과 하루 timeline은 `2026-07-10-refactor-line-2-constant-speed-stop-simulation-plan.md`의 route-cycle 방식으로 대체한다. Three.js 모델, OSM service route, MapLibre custom layer 구조는 유지한다.
+
 ## 결정 사항
 
 - MVP 범위는 2호선 본선 `외선순환`과 `내선순환`이다.

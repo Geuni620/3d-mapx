@@ -23,7 +23,8 @@ pnpm build:storybook
 
 - 2호선 외선순환과 내선순환에 procedural 3량 열차 한 대씩을 표시한다.
 - 열차는 2호선 선택, `2호선 Train` ON, zoom `14.5` 초과일 때 렌더링된다.
-- 위치는 현재 timestamp와 `Asia/Seoul` 기준 mock 속도·정차 profile로 결정된다.
+- 위치는 고정 simulation epoch부터 반복되는 route cycle과 현재 timestamp로 결정된다.
+- 역 사이는 demo 순항 속도 `12 m/s`로 이동하고, 각 역에서 `20초` 정차한다.
 - Blender/GLB/외부 texture를 사용하지 않는다.
 - 속도와 정차 값은 실제 운행 데이터가 아닌 시각 검증용 demo parameter다.
 
@@ -42,5 +43,6 @@ pnpm storybook
 - `Train Model / Interactive`: camera preset, 차량 수, 차체·노선 색상, 조명과 부품 visibility 조정
 - `Train Model / Geometry Audit`: 고정 3/4 camera, bounding box, axes, 공유 geometry와 texture 부재 확인
 - `Train Motion / Opposite Directions`: synthetic S-curve 반대 방향 articulation
-- `Train Motion / Line 2 Fixed Timestamp`: 외선·내선의 비교 가능한 고정 시각
+- `Train Motion / Line 2 Fixed Timestamp`: 일정 속도로 이동 중인 외선·내선의 비교 가능한 고정 시각
+- `Train Motion / Line 2 Dwelling`: 역 정차 상태를 재현하는 고정 시각
 - `Train Motion / Line 2 Live`: 실제 2호선 service route를 현재 시각으로 재생
