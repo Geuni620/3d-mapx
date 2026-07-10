@@ -8,12 +8,21 @@ import {
   getSelectedLineNumbers,
   selectedLineNumberSetReducer,
 } from "./subway-line-selection";
+import {
+  createInitialSubwayLayerVisibility,
+  subwayLayerVisibilityReducer,
+} from "./subway-layer-visibility";
 
 export function SeoulSubwayExplorer() {
   const [selectedLineNumberSet, dispatchSelectedLineNumberSet] = useReducer(
     selectedLineNumberSetReducer,
     undefined,
     createInitialSelectedLineNumberSet,
+  );
+  const [layerVisibility, dispatchLayerVisibility] = useReducer(
+    subwayLayerVisibilityReducer,
+    undefined,
+    createInitialSubwayLayerVisibility,
   );
   const [zoom, setZoom] = useState(INITIAL_VIEW_STATE.zoom);
 
@@ -27,6 +36,7 @@ export function SeoulSubwayExplorer() {
     <div className="relative h-screen w-screen">
       <SeoulSubwayMap
         selectedLineNumbers={selectedLineNumbers}
+        layerVisibility={layerVisibility}
         visualLevel={visualLevel}
         zoom={zoom}
         onZoomChange={setZoom}
@@ -35,6 +45,10 @@ export function SeoulSubwayExplorer() {
         className="absolute left-4 top-4 z-10"
         selectedLineNumberSet={selectedLineNumberSet}
         dispatchSelectedLineNumberSet={dispatchSelectedLineNumberSet}
+        layerVisibility={layerVisibility}
+        dispatchLayerVisibility={dispatchLayerVisibility}
+        visualLevel={visualLevel}
+        zoom={zoom}
       />
     </div>
   );

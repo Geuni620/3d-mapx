@@ -1,11 +1,17 @@
 import type { Dispatch } from "react";
 import { cva } from "class-variance-authority";
+import { SubwayLayerVisibilityEditor } from "./subway-layer-visibility-editor";
 import {
   SUBWAY_LINE_COLORS,
   SUBWAY_LINES,
   type SubwayLineNumber,
 } from "../features/subway/subway-constants";
+import {
+  type SubwayLayerVisibility,
+  type SubwayLayerVisibilityAction,
+} from "../features/subway/subway-layer-visibility";
 import type { SubwayLineSelectionAction } from "../features/subway/subway-line-selection";
+import type { SubwayVisualLevel } from "../features/subway/subway-paths";
 import { cn } from "../lib/cn";
 
 const subwayLineInspector = cva(
@@ -15,12 +21,20 @@ const subwayLineInspector = cva(
 interface SubwayLineInspectorProps {
   selectedLineNumberSet: ReadonlySet<SubwayLineNumber>;
   dispatchSelectedLineNumberSet: Dispatch<SubwayLineSelectionAction>;
+  layerVisibility: SubwayLayerVisibility;
+  dispatchLayerVisibility: Dispatch<SubwayLayerVisibilityAction>;
+  visualLevel: SubwayVisualLevel;
+  zoom: number;
   className?: string;
 }
 
 export function SubwayLineInspector({
   selectedLineNumberSet,
   dispatchSelectedLineNumberSet,
+  layerVisibility,
+  dispatchLayerVisibility,
+  visualLevel,
+  zoom,
   className,
 }: SubwayLineInspectorProps) {
   const handleToggleLine = (lineNumber: SubwayLineNumber) => {
@@ -50,6 +64,12 @@ export function SubwayLineInspector({
       <SubwayLineActions
         onSelectAll={handleSelectAllLines}
         onClearSelection={handleClearLineSelection}
+      />
+      <SubwayLayerVisibilityEditor
+        layerVisibility={layerVisibility}
+        dispatchLayerVisibility={dispatchLayerVisibility}
+        visualLevel={visualLevel}
+        zoom={zoom}
       />
     </aside>
   );

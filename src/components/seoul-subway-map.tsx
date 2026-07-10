@@ -12,11 +12,13 @@ import {
 } from "../features/subway/subway-paths";
 import type { SubwayStationMapPoint } from "../features/subway/subway-geojson";
 import type { SubwayLineNumber } from "../features/subway/subway-constants";
+import type { SubwayLayerVisibility } from "../features/subway/subway-layer-visibility";
 import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-ids";
 import { SeoulSubwayLayers } from "./seoul-subway-layers";
 
 interface SeoulSubwayMapProps {
   selectedLineNumbers: SubwayLineNumber[];
+  layerVisibility: SubwayLayerVisibility;
   visualLevel: SubwayVisualLevel;
   zoom: number;
   onZoomChange: (zoom: number) => void;
@@ -24,6 +26,7 @@ interface SeoulSubwayMapProps {
 
 export function SeoulSubwayMap({
   selectedLineNumbers,
+  layerVisibility,
   visualLevel,
   zoom,
   onZoomChange,
@@ -32,6 +35,7 @@ export function SeoulSubwayMap({
     () => createVisibleSubwayStations(selectedLineNumbers),
     [selectedLineNumbers],
   );
+  // OSM 역사 노드는 노선 geometry와 어긋날 수 있어, 라벨/마커에는 보정 좌표를 사용한다.
   const displayStations = useMemo(
     () => createSubwayDisplayStations(visibleStations),
     [visibleStations],
@@ -39,8 +43,13 @@ export function SeoulSubwayMap({
   const visualLevelId = visualLevel.id;
   const subwayDeckLayers = useMemo(
     () =>
-      createSubwayDeckLayers(selectedLineNumbers, displayStations, visualLevel),
-    [displayStations, selectedLineNumbers, visualLevelId],
+      createSubwayDeckLayers(
+        selectedLineNumbers,
+        displayStations,
+        layerVisibility,
+        visualLevel,
+      ),
+    [displayStations, layerVisibility, selectedLineNumbers, visualLevelId],
   );
 
   return (
