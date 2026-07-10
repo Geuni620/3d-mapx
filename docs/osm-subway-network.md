@@ -20,6 +20,7 @@ scripts/generate-osm-subway-network.mjs
 - route master relation에 연결된 하위 route relation을 따라간다.
 - relation 안의 node, way, relation 정보를 파싱한다.
 - way를 이어서 노선 geometry인 `pathSegments`를 만든다.
+- 하위 subway relation별 운행 방향과 stop 순서를 `serviceRoutes`로 보존한다.
 - stop, platform 역할의 node를 모아 역사 목록을 만든다.
 - 호선별 JSON 파일과 TypeScript wrapper 파일을 생성한다.
 
@@ -70,12 +71,13 @@ src/features/subway/data/osm-subway-line-7.json
 src/features/subway/data/osm-subway-line-8.json
 ```
 
-각 JSON 파일은 해당 호선의 `route`와 `stations`를 가진다.
+각 JSON 파일은 해당 호선의 `route`, `stations`, `serviceRoutes`를 가진다.
 
 ```ts
 interface SeoulSubwayOsmLineNetwork {
   route: SeoulSubwayOsmRoute;
   stations: SeoulSubwayOsmStation[];
+  serviceRoutes?: SeoulSubwayOsmServiceRoute[];
 }
 ```
 
@@ -99,6 +101,14 @@ OSM에서 새로 내려받으려면 `--refresh`를 붙인다.
 node scripts/generate-osm-subway-network.mjs --refresh
 ```
 
+특정 호선 JSON만 다시 만들려면 `--line`을 사용한다. 이 경우 다른 호선 JSON과 TypeScript wrapper는 변경하지 않는다.
+
+```bash
+node scripts/generate-osm-subway-network.mjs --line 2
+```
+
+2호선 `serviceRoutes`에는 외선순환, 내선순환, 성수지선, 신정지선 relation이 각각 보존된다. 현재 열차 시뮬레이션은 외선순환 `2404374`와 내선순환 `4729409`만 소비한다.
+
 새 호선을 추가할 때는 `scripts/generate-osm-subway-network.mjs`의 `ROUTE_MASTERS`에 route master relation ID를 추가한 뒤 스크립트를 다시 실행한다.
 
 ## 현재 route master relation ID
@@ -117,6 +127,7 @@ node scripts/generate-osm-subway-network.mjs --refresh
 ## 주의 사항
 
 - OSM 데이터는 외부 커뮤니티 데이터이므로 relation 구조가 바뀔 수 있다.
+- 2호선 생성 시 외선·내선 relation ID와 방향이 예상과 다르면 생성기가 실패한다.
 - `--refresh` 실행 결과는 기존 JSON과 달라질 수 있으므로 변경 내용을 반드시 지도에서 확인한다.
 - 생성된 JSON은 앱에서 사용하는 정적 데이터이므로 커밋 대상이다.
 - `/private/tmp/3d-mapx-osm-subway` 아래의 XML 캐시는 임시 원본이므로 커밋하지 않는다.
