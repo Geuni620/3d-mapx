@@ -1,8 +1,5 @@
 import { Layer, Source } from "react-map-gl/maplibre";
-import {
-  SUBWAY_LINE_COLORS,
-  SUBWAY_LINES,
-} from "../features/subway/subway-constants";
+import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-ids";
 import {
   createSubwayStationGeoJson,
   type SubwayStationMapPoint,
@@ -17,23 +14,8 @@ export function SeoulSubwayLayers({ stations }: SeoulSubwayLayersProps) {
 
   return (
     <Source id="seoul-subway-stations" type="geojson" data={stationGeoJson}>
-      {SUBWAY_LINES.map((lineNumber) => (
-        <Layer
-          key={`subway-station-${lineNumber}`}
-          id={`subway-station-${lineNumber}`}
-          type="circle"
-          filter={["==", ["get", "lineNumber"], String(lineNumber)]}
-          paint={{
-            "circle-color": "#050807",
-            "circle-radius": 3.8,
-            "circle-stroke-color": SUBWAY_LINE_COLORS[lineNumber],
-            "circle-stroke-width": 0.5,
-          }}
-        />
-      ))}
-
       <Layer
-        id="subway-station-label"
+        id={SUBWAY_STATION_LABEL_LAYER_ID}
         type="symbol"
         minzoom={12.5}
         layout={{
