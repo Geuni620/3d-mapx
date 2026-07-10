@@ -23,6 +23,8 @@ deck.gl은 나중에 추가할 시각화 레이어다. 경로 path, animated tri
 
 Three.js는 이후 단계의 커스텀 3D 도구다. 앱에 HMI 패널, 센서형 3D 오브젝트, point cloud, 커스텀 차량 모델, 일반 지도 레이어로 표현하기 어려운 시각 효과가 필요할 때 사용한다.
 
+현재 vertical slice에서는 2호선 외선순환·내선순환 위에 Three.js procedural 3량 열차를 MapLibre 공유 WebGL custom layer로 표시한다. 이 모델은 Blender/GLB 없이 geometry와 material을 조합하며, 지도용 visual proxy이므로 실제 편성의 외형·차량 수를 그대로 재현하지 않는다.
+
 ## 제품 단계
 
 1. 지도 기반
@@ -37,8 +39,9 @@ Three.js는 이후 단계의 커스텀 3D 도구다. 앱에 HMI 패널, 센서�
    - 1~9호선 노선 색상 적용.
 
 3. 시뮬레이션 레이어
-   - mock 열차 이동.
+   - 2호선 외선·내선 timestamp 기반 mock 열차 이동.
    - 역 사이 위치 보간.
+   - mock 시간대별 속도와 정차 시간. 실제 운행 수치로 해석하지 않는다.
    - animated route replay.
    - 실시간 GPS가 없는 경우 timetable 또는 도착 정보 기반 위치 추론.
 
@@ -57,6 +60,7 @@ Three.js는 이후 단계의 커스텀 3D 도구다. 앱에 HMI 패널, 센서�
 ## 데이터 소스
 
 - OpenStreetMap: 1~8호선의 노선 geometry와 역사 좌표의 기준 데이터.
+- OpenStreetMap 2호선 child relation: 외선·내선 및 지선별 directed service route의 기준 데이터.
 
 1~8호선의 노선과 역사 좌표는 공공 API 좌표를 사용하지 않고 OpenStreetMap route master relation을 기준으로 관리한다.
 
