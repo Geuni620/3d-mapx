@@ -27,6 +27,33 @@ export interface SeoulSubwayOsmRoute {
   pathSegments: SubwayCoordinate[][];
 }
 
+export type SubwayServiceDirection =
+  | "outer-loop"
+  | "inner-loop"
+  | "outbound"
+  | "inbound"
+  | "unknown";
+
+export interface SeoulSubwayOsmServiceStop {
+  id: string;
+  osmNodeId: number;
+  name: string;
+  coordinate: SubwayCoordinate;
+  distanceMeters: number;
+}
+
+export interface SeoulSubwayOsmServiceRoute {
+  id: string;
+  lineNumber: SubwayLineNumber;
+  osmRelationId: number;
+  name: string;
+  from?: string;
+  to?: string;
+  direction: SubwayServiceDirection;
+  path: SubwayCoordinate[];
+  stops: SeoulSubwayOsmServiceStop[];
+}
+
 export interface SeoulSubwayOsmStation {
   id: string;
   osmNodeId: number;
@@ -41,12 +68,14 @@ export interface SeoulSubwayOsmStation {
 export interface SeoulSubwayOsmLineNetwork {
   route: SeoulSubwayOsmRoute;
   stations: SeoulSubwayOsmStation[];
+  serviceRoutes?: SeoulSubwayOsmServiceRoute[];
 }
 
 export interface SeoulSubwayOsmNetwork {
   source: SeoulSubwayOsmNetworkSource;
   routes: SeoulSubwayOsmRoute[];
   stations: SeoulSubwayOsmStation[];
+  serviceRoutes: SeoulSubwayOsmServiceRoute[];
 }
 
 const SEOUL_SUBWAY_OSM_LINE_NETWORKS = [
@@ -80,5 +109,8 @@ export const SEOUL_SUBWAY_OSM_NETWORK = {
   routes: SEOUL_SUBWAY_OSM_LINE_NETWORKS.map((lineNetwork) => lineNetwork.route),
   stations: SEOUL_SUBWAY_OSM_LINE_NETWORKS.flatMap(
     (lineNetwork) => lineNetwork.stations,
+  ),
+  serviceRoutes: SEOUL_SUBWAY_OSM_LINE_NETWORKS.flatMap(
+    (lineNetwork) => lineNetwork.serviceRoutes ?? [],
   ),
 } satisfies SeoulSubwayOsmNetwork;
