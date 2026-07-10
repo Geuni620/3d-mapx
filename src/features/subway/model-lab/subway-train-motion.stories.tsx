@@ -3,6 +3,7 @@ import {
   Line2TrainMotionPreview,
   SyntheticTrainMotionPreview,
 } from "./subway-train-preview";
+import { LINE_2_TRAIN_SIMULATION_EPOCH_MS } from "../line-2-train-demo-config";
 
 interface TrainMotionStoryArgs {
   progress: number;
@@ -13,7 +14,8 @@ interface TrainMotionStoryArgs {
   live: boolean;
 }
 
-const FIXED_LINE_2_TIMESTAMP = Date.UTC(2026, 6, 10, 3, 0, 0);
+const MOVING_LINE_2_TIMESTAMP = LINE_2_TRAIN_SIMULATION_EPOCH_MS + 30_000;
+const DWELLING_LINE_2_TIMESTAMP = LINE_2_TRAIN_SIMULATION_EPOCH_MS + 10_000;
 
 const meta = {
   title: "Model Lab/Train Motion",
@@ -45,7 +47,7 @@ export const OppositeDirections: Story = {
     speed: 1,
     paused: false,
     showGuides: true,
-    fixedTimestamp: FIXED_LINE_2_TIMESTAMP,
+    fixedTimestamp: MOVING_LINE_2_TIMESTAMP,
     live: false,
   },
   parameters: {
@@ -69,7 +71,32 @@ export const Line2FixedTimestamp: Story = {
     speed: 1,
     paused: true,
     showGuides: true,
-    fixedTimestamp: FIXED_LINE_2_TIMESTAMP,
+    fixedTimestamp: MOVING_LINE_2_TIMESTAMP,
+    live: false,
+  },
+  parameters: {
+    controls: {
+      include: ["fixedTimestamp", "showGuides"],
+    },
+  },
+  render: ({ fixedTimestamp, showGuides }) => (
+    <Line2TrainMotionPreview
+      fixedTimestamp={fixedTimestamp}
+      live={false}
+      speed={1}
+      paused
+      showGuides={showGuides}
+    />
+  ),
+};
+
+export const Line2Dwelling: Story = {
+  args: {
+    progress: 0.42,
+    speed: 1,
+    paused: true,
+    showGuides: true,
+    fixedTimestamp: DWELLING_LINE_2_TIMESTAMP,
     live: false,
   },
   parameters: {
@@ -94,7 +121,7 @@ export const Line2Live: Story = {
     speed: 1,
     paused: false,
     showGuides: true,
-    fixedTimestamp: FIXED_LINE_2_TIMESTAMP,
+    fixedTimestamp: MOVING_LINE_2_TIMESTAMP,
     live: true,
   },
   parameters: {

@@ -170,6 +170,18 @@ body {
   font-size: 11px;
 }
 
+.model-lab-route-label span {
+  display: block;
+}
+
+.model-lab-train-state {
+  margin-top: 5px;
+  color: #e8f3f2;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
 @media (max-width: 720px) {
   .model-lab-header {
     max-width: calc(100% - 74px);

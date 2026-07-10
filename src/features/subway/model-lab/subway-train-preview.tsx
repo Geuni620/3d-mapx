@@ -24,8 +24,17 @@ import {
   type SeoulSubwayOsmServiceRoute,
   type SubwayCoordinate,
 } from "../osm-subway-network";
+import {
+  getLine2TrainPhaseOffsetSeconds,
+  LINE_2_TRAIN_CRUISE_SPEED_METERS_PER_SECOND,
+  LINE_2_TRAIN_DWELL_SECONDS,
+  LINE_2_TRAIN_SIMULATION_EPOCH_MS,
+} from "../line-2-train-demo-config";
 import { createSubwayRouteSampler } from "../subway-route-sampler";
-import { createSubwayTrainSimulation } from "../line-2-train-simulation";
+import {
+  createSubwayTrainSimulation,
+  type SubwayTrainSimulationState,
+} from "../line-2-train-simulation";
 import { createSubwayTrainModel } from "../subway-train-model";
 import {
   applySubwayTrainModelAppearance,
@@ -49,13 +58,6 @@ const LINE_2_SERVICE_ROUTES = SEOUL_SUBWAY_OSM_NETWORK.serviceRoutes.filter(
   (route) =>
     route.osmRelationId === 2404374 || route.osmRelationId === 4729409,
 );
-const MOCK_SPEED_PROFILE = [
-  { startMinute: 0, speedMetersPerSecond: 10 },
-  { startMinute: 330, speedMetersPerSecond: 13.5 },
-  { startMinute: 600, speedMetersPerSecond: 11 },
-  { startMinute: 960, speedMetersPerSecond: 13 },
-  { startMinute: 1_200, speedMetersPerSecond: 9.5 },
-];
 
 export type SubwayTrainCameraPreset = "front" | "side" | "top" | "three-quarter";
 
@@ -102,6 +104,12 @@ interface ModelLabStage {
   controls: OrbitControls;
   render: () => void;
   dispose: () => void;
+}
+
+interface Line2TrainStatus {
+  osmRelationId: number;
+  phase: SubwayTrainSimulationState["phase"];
+  speedMetersPerSecond: number;
 }
 
 export function SubwayTrainPreview({
@@ -338,6 +346,7 @@ export function Line2TrainMotionPreview({
 }: Line2TrainMotionPreviewProps) {
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const [metrics, setMetrics] = useState<ModelLabMetrics>(EMPTY_METRICS);
+  const [trainStatuses, setTrainStatuses] = useState<Line2TrainStatus[]>([]);
 
   useEffect(() => {
     if (container === null) {
@@ -380,9 +389,13 @@ export function Line2TrainMotionPreview({
         ),
         carCount: 3,
         carSpacingMeters: 21,
-        dwellSeconds: 20,
-        phaseOffsetSeconds: routeIndex * 1_370,
-        speedProfile: MOCK_SPEED_PROFILE,
+        cruiseSpeedMetersPerSecond:
+          LINE_2_TRAIN_CRUISE_SPEED_METERS_PER_SECOND,
+        dwellSeconds: LINE_2_TRAIN_DWELL_SECONDS,
+        phaseOffsetSeconds: getLine2TrainPhaseOffsetSeconds(
+          serviceRoute.direction,
+        ),
+        simulationEpochMs: LINE_2_TRAIN_SIMULATION_EPOCH_MS,
       });
 
       stage.scene.add(train.root);
@@ -400,55 +413,83 @@ export function Line2TrainMotionPreview({
     const simulationStartedAt = live ? Date.now() : fixedTimestamp;
     let animationFrame = 0;
     let metricsCommitted = false;
+    let previousStatusSignature = "";
     const renderFrame = (time: number) => {
       const elapsedMilliseconds = paused
         ? 0
         : (time - animationStartedAt) * speed;
       const timestamp = simulationStartedAt + elapsedMilliseconds;
 
-      runtimes.forEach(({ sampler, train, guideLine, simulation, routeIndex }) => {
-        const state = simulation.getState(timestamp);
-        const frontCoordinate = state.carPoses[0].coordinate;
-        const panelX = routeIndex === 0 ? -42 : 42;
-        const sceneScale = 0.27;
+      const nextTrainStatuses = runtimes.map(
+        ({
+          serviceRoute,
+          sampler,
+          train,
+          guideLine,
+          simulation,
+          routeIndex,
+        }) => {
+          const state = simulation.getState(timestamp);
+          const frontCoordinate = state.carPoses[0].coordinate;
+          const panelX = routeIndex === 0 ? -42 : 42;
+          const sceneScale = 0.27;
 
-        state.carPoses.forEach((pose, carIndex) => {
-          const localPosition = coordinateToLocalMeters(
-            pose.coordinate,
-            frontCoordinate,
-          );
-          const car = train.cars[carIndex];
-
-          car.position.set(
-            panelX + localPosition.x * sceneScale,
-            localPosition.y * sceneScale,
-            0.25,
-          );
-          car.rotation.set(0, 0, -pose.headingRadians);
-          car.scale.setScalar(sceneScale);
-        });
-
-        if (guideLine !== undefined) {
-          const guidePoints = Array.from({ length: 49 }, (_, pointIndex) => {
-            const distanceOffset = (pointIndex - 24) * 8;
-            const sample = sampler.sample(
-              state.frontDistanceMeters + distanceOffset,
-            );
+          state.carPoses.forEach((pose, carIndex) => {
             const localPosition = coordinateToLocalMeters(
-              sample.coordinate,
+              pose.coordinate,
               frontCoordinate,
             );
+            const car = train.cars[carIndex];
 
-            return new Vector3(
+            car.position.set(
               panelX + localPosition.x * sceneScale,
               localPosition.y * sceneScale,
-              0.05,
+              0.25,
             );
+            car.rotation.set(0, 0, -pose.headingRadians);
+            car.scale.setScalar(sceneScale);
           });
 
-          guideLine.geometry.setFromPoints(guidePoints);
-        }
-      });
+          if (guideLine !== undefined) {
+            const guidePoints = Array.from({ length: 49 }, (_, pointIndex) => {
+              const distanceOffset = (pointIndex - 24) * 8;
+              const sample = sampler.sample(
+                state.frontDistanceMeters + distanceOffset,
+              );
+              const localPosition = coordinateToLocalMeters(
+                sample.coordinate,
+                frontCoordinate,
+              );
+
+              return new Vector3(
+                panelX + localPosition.x * sceneScale,
+                localPosition.y * sceneScale,
+                0.05,
+              );
+            });
+
+            guideLine.geometry.setFromPoints(guidePoints);
+          }
+
+          return {
+            osmRelationId: serviceRoute.osmRelationId,
+            phase: state.phase,
+            speedMetersPerSecond: state.speedMetersPerSecond,
+          };
+        },
+      );
+      const statusSignature = nextTrainStatuses
+        .map(
+          ({ osmRelationId, phase, speedMetersPerSecond }) =>
+            `${osmRelationId}:${phase}:${speedMetersPerSecond}`,
+        )
+        .join("|");
+
+      if (statusSignature !== previousStatusSignature) {
+        previousStatusSignature = statusSignature;
+        setTrainStatuses(nextTrainStatuses);
+      }
+
       stage.render();
 
       if (!metricsCommitted) {
@@ -486,7 +527,12 @@ export function Line2TrainMotionPreview({
           : "비교 캡처를 위해 실제 2호선 service route를 고정 timestamp에서 렌더링합니다."
       }
       metrics={metrics}
-      routeLabels={<Line2RouteLabels routes={LINE_2_SERVICE_ROUTES} />}
+      routeLabels={
+        <Line2RouteLabels
+          routes={LINE_2_SERVICE_ROUTES}
+          trainStatuses={trainStatuses}
+        />
+      }
     >
       <div
         ref={setContainer}
@@ -578,15 +624,36 @@ function ModelAudit({
   );
 }
 
-function Line2RouteLabels({ routes }: { routes: SeoulSubwayOsmServiceRoute[] }) {
+function Line2RouteLabels({
+  routes,
+  trainStatuses,
+}: {
+  routes: SeoulSubwayOsmServiceRoute[];
+  trainStatuses: Line2TrainStatus[];
+}) {
   return (
-    <aside className="model-lab-route-labels" aria-label="Line 2 service routes">
-      {routes.map((route) => (
-        <div className="model-lab-route-label" key={route.osmRelationId}>
-          <strong>{route.direction}</strong>
-          OSM {route.osmRelationId}
-        </div>
-      ))}
+    <aside
+      className="model-lab-route-labels"
+      aria-label="Line 2 service routes"
+      aria-live="polite"
+    >
+      {routes.map((route) => {
+        const trainStatus = trainStatuses.find(
+          (status) => status.osmRelationId === route.osmRelationId,
+        );
+
+        return (
+          <div className="model-lab-route-label" key={route.osmRelationId}>
+            <strong>{route.direction}</strong>
+            <span>OSM {route.osmRelationId}</span>
+            <span className="model-lab-train-state">
+              {trainStatus === undefined
+                ? "INITIALIZING"
+                : `${trainStatus.phase.toUpperCase()} · ${trainStatus.speedMetersPerSecond.toFixed(0)} m/s`}
+            </span>
+          </div>
+        );
+      })}
     </aside>
   );
 }

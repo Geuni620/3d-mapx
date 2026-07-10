@@ -1,96 +1,163 @@
 import { describe, expect, it } from "vitest";
-import { createSubwayRouteSampler } from "./subway-route-sampler";
-import {
-  createSubwayTrainSimulation,
-  getKoreanMinuteOfDay,
-} from "./line-2-train-simulation";
+import type { SubwayRouteSampler } from "./subway-route-sampler";
+import { createSubwayTrainSimulation } from "./line-2-train-simulation";
 
-const TEST_LOOP = [
-  [126.97, 37.56],
-  [126.971, 37.56],
-  [126.971, 37.561],
-  [126.97, 37.561],
-] as const;
+const SIMULATION_EPOCH_MS = Date.UTC(2026, 0, 1, 0, 0, 0);
+const TEST_ROUTE_LENGTH_METERS = 100;
+const TEST_CRUISE_SPEED_METERS_PER_SECOND = 10;
+const TEST_DWELL_SECONDS = 2;
+const TEST_CYCLE_SECONDS = 14;
 
-const KOREAN_MIDNIGHT = Date.UTC(2026, 6, 9, 15, 0, 0);
-
-describe("한국 시간 계산", () => {
-  it("실행 환경의 시간대가 다를 때 한국 시각을 계산하면 Asia/Seoul 기준 하루 경과 분을 반환한다", () => {
-    expect(getKoreanMinuteOfDay(KOREAN_MIDNIGHT)).toBe(0);
-    expect(getKoreanMinuteOfDay(KOREAN_MIDNIGHT + 6 * 60 * 60 * 1000)).toBe(
-      360,
+const TEST_SAMPLER: SubwayRouteSampler = {
+  totalDistanceMeters: TEST_ROUTE_LENGTH_METERS,
+  sample(distanceMeters) {
+    const wrappedDistanceMeters = wrap(
+      distanceMeters,
+      TEST_ROUTE_LENGTH_METERS,
     );
-  });
-});
+
+    return {
+      coordinate: [wrappedDistanceMeters, 0],
+      headingRadians: wrappedDistanceMeters < 50 ? 0 : Math.PI,
+    };
+  },
+  project(coordinate) {
+    return {
+      coordinate,
+      distanceMeters: coordinate[0],
+      headingRadians: 0,
+      offsetMeters: 0,
+    };
+  },
+};
 
 describe("2호선 열차 운행 시뮬레이션", () => {
   it("같은 시각이 주어졌을 때 열차 상태를 조회하면 항상 같은 운행 상태를 반환한다", () => {
     const simulation = createTestSimulation();
-    const timestamp = KOREAN_MIDNIGHT + 12_345;
+    const timestamp = atSecond(3.25);
+    const expectedState = simulation.getState(timestamp);
 
-    expect(simulation.getState(timestamp)).toEqual(
-      simulation.getState(timestamp),
+    simulation.getState(atSecond(9.75));
+
+    expect(simulation.getState(timestamp)).toEqual(expectedState);
+  });
+
+  it("열차가 역 사이를 이동할 때 상태를 조회하면 설정한 일정 순항 속도로 이동한다", () => {
+    const simulation = createTestSimulation();
+    const earlierState = simulation.getState(atSecond(2.5));
+    const laterState = simulation.getState(atSecond(4));
+
+    expect(laterState.frontDistanceMeters - earlierState.frontDistanceMeters).toBe(
+      TEST_CRUISE_SPEED_METERS_PER_SECOND * 1.5,
+    );
+    expect(earlierState.speedMetersPerSecond).toBe(
+      TEST_CRUISE_SPEED_METERS_PER_SECOND,
+    );
+    expect(laterState.speedMetersPerSecond).toBe(
+      TEST_CRUISE_SPEED_METERS_PER_SECOND,
     );
   });
 
-  it("열차가 역에 도착했을 때 운행 상태를 조회하면 정차한 뒤 다음 역으로 이동한다", () => {
+  it("열차가 각 역에 도착했을 때 상태를 조회하면 설정한 시간 동안 정차한다", () => {
     const simulation = createTestSimulation();
+    const firstStopState = simulation.getState(atSecond(1.999));
+    const firstDepartureState = simulation.getState(atSecond(2));
+    const secondStopState = simulation.getState(atSecond(7.999));
+    const secondDepartureState = simulation.getState(atSecond(8));
 
-    const dwelling = simulation.getState(KOREAN_MIDNIGHT + 1_000);
-    const moving = simulation.getState(KOREAN_MIDNIGHT + 3_000);
-
-    expect(dwelling.phase).toBe("dwelling");
-    expect(dwelling.speedMetersPerSecond).toBe(0);
-    expect(moving.phase).toBe("moving");
-    expect(moving.speedMetersPerSecond).toBe(10);
-    expect(moving.frontDistanceMeters).toBeGreaterThan(0);
+    expect(firstStopState.phase).toBe("dwelling");
+    expect(firstStopState.frontDistanceMeters).toBe(0);
+    expect(firstStopState.speedMetersPerSecond).toBe(0);
+    expect(firstDepartureState.phase).toBe("moving");
+    expect(secondStopState.phase).toBe("dwelling");
+    expect(secondStopState.frontDistanceMeters).toBe(40);
+    expect(secondStopState.speedMetersPerSecond).toBe(0);
+    expect(secondDepartureState.phase).toBe("moving");
   });
 
-  it("여러 칸으로 구성된 열차가 이동할 때 운행 상태를 조회하면 차량마다 서로 다른 위치와 방향을 반환한다", () => {
+  it("한 바퀴 운행 시간이 지난 뒤 상태를 조회하면 이전과 같은 운행 상태를 반환한다", () => {
     const simulation = createTestSimulation();
-    const state = simulation.getState(KOREAN_MIDNIGHT + 15_000);
+
+    expect(simulation.getState(atSecond(1))).toEqual(
+      simulation.getState(atSecond(1 + TEST_CYCLE_SECONDS)),
+    );
+  });
+
+  it("아주 긴 시간이 지난 뒤 상태를 조회하면 누적 오차 없이 같은 운행 상태를 반환한다", () => {
+    const simulation = createTestSimulation();
+    const cycleCount = 1_000_000;
+
+    expect(
+      simulation.getState(
+        atSecond(1 + TEST_CYCLE_SECONDS * cycleCount),
+      ),
+    ).toEqual(simulation.getState(atSecond(1)));
+  });
+
+  it("열차별 출발 시차가 설정되어 있을 때 상태를 조회하면 프레임 시간을 누적하지 않고 시차를 적용한다", () => {
+    const simulation = createTestSimulation({ phaseOffsetSeconds: 3 });
+    const state = simulation.getState(atSecond(0));
+
+    expect(state.phase).toBe("moving");
+    expect(state.frontDistanceMeters).toBe(10);
+  });
+
+  it("마지막 역에서 첫 역으로 이동할 때 상태를 조회하면 경로 끝을 지나 출발점으로 이어진다", () => {
+    const simulation = createTestSimulation();
+    const beforeCycleEnd = simulation.getState(atSecond(13.999));
+    const cycleStart = simulation.getState(atSecond(14));
+
+    expect(beforeCycleEnd.phase).toBe("moving");
+    expect(beforeCycleEnd.frontDistanceMeters).toBeCloseTo(99.99, 5);
+    expect(cycleStart.phase).toBe("dwelling");
+    expect(cycleStart.frontDistanceMeters).toBe(0);
+  });
+
+  it("여러 칸으로 구성된 열차가 이동할 때 상태를 조회하면 차량마다 서로 다른 위치를 반환한다", () => {
+    const simulation = createTestSimulation();
+    const state = simulation.getState(atSecond(4));
 
     expect(state.carPoses).toHaveLength(3);
     expect(new Set(state.carPoses.map((pose) => pose.distanceMeters)).size).toBe(
       3,
     );
-    expect(new Set(state.carPoses.map((pose) => pose.headingRadians)).size).toBeGreaterThan(
-      1,
-    );
   });
 
-  it("한국 시간대별 속도가 설정되어 있을 때 운행 상태를 조회하면 해당 시간의 속도를 적용한다", () => {
-    const simulation = createTestSimulation();
-
-    const normal = simulation.getState(KOREAN_MIDNIGHT + 3_000);
-    const slower = simulation.getState(
-      KOREAN_MIDNIGHT + 6 * 60 * 60 * 1000 + 3_000,
-    );
-
-    expect(normal.speedMetersPerSecond).toBe(10);
-    expect(slower.speedMetersPerSecond).toBe(5);
+  it.each([
+    ["0 이하의 순항 속도", { cruiseSpeedMetersPerSecond: 0 }],
+    ["음수인 정차 시간", { dwellSeconds: -1 }],
+    ["비어 있는 정차역 목록", { stopDistancesMeters: [] }],
+    ["잘못된 정차역 목록", { stopDistancesMeters: [Number.NaN] }],
+    [
+      "잘못된 경로 길이",
+      { sampler: { ...TEST_SAMPLER, totalDistanceMeters: 0 } },
+    ],
+  ])("%s 설정이 주어졌을 때 시뮬레이션을 만들면 오류를 반환한다", (_label, overrides) => {
+    expect(() => createTestSimulation(overrides)).toThrow();
   });
 });
 
-function createTestSimulation() {
-  const sampler = createSubwayRouteSampler(TEST_LOOP);
-
-  if (sampler === undefined) {
-    throw new Error("Expected the test route to be valid");
-  }
-
+function createTestSimulation(
+  overrides: Partial<Parameters<typeof createSubwayTrainSimulation>[0]> = {},
+) {
   return createSubwayTrainSimulation({
     id: "test-train",
-    sampler,
-    stopDistancesMeters: [0, sampler.totalDistanceMeters / 2],
+    sampler: TEST_SAMPLER,
+    stopDistancesMeters: [0, 40],
     carCount: 3,
-    carSpacingMeters: 24,
-    dwellSeconds: 2,
+    carSpacingMeters: 20,
+    cruiseSpeedMetersPerSecond: TEST_CRUISE_SPEED_METERS_PER_SECOND,
+    dwellSeconds: TEST_DWELL_SECONDS,
     phaseOffsetSeconds: 0,
-    speedProfile: [
-      { startMinute: 0, speedMetersPerSecond: 10 },
-      { startMinute: 360, speedMetersPerSecond: 5 },
-      { startMinute: 420, speedMetersPerSecond: 10 },
-    ],
+    simulationEpochMs: SIMULATION_EPOCH_MS,
+    ...overrides,
   });
+}
+
+function atSecond(second: number) {
+  return SIMULATION_EPOCH_MS + second * 1_000;
+}
+
+function wrap(value: number, maximum: number) {
+  return ((value % maximum) + maximum) % maximum;
 }
