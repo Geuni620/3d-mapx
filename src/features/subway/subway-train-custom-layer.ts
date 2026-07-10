@@ -12,6 +12,12 @@ import {
   WebGLRenderer,
 } from "three";
 import type { SeoulSubwayOsmServiceRoute } from "./osm-subway-network";
+import {
+  getLine2TrainPhaseOffsetSeconds,
+  LINE_2_TRAIN_CRUISE_SPEED_METERS_PER_SECOND,
+  LINE_2_TRAIN_DWELL_SECONDS,
+  LINE_2_TRAIN_SIMULATION_EPOCH_MS,
+} from "./line-2-train-demo-config";
 import { createSubwayRouteSampler } from "./subway-route-sampler";
 import { SUBWAY_TRAIN_LAYER_ID } from "./subway-layer-ids";
 import {
@@ -27,14 +33,6 @@ const LINE_2_COLOR = "#00a84d";
 const TRAIN_DISPLAY_ALTITUDE_METERS = 3.5;
 const TRAIN_CROSS_SECTION_SCALE = 1.55;
 const CAR_SPACING_METERS = 21;
-// 실제 운행 자료로 교체하기 전까지 시간대별 속도를 임의 값으로 사용한다.
-const MOCK_SPEED_PROFILE = [
-  { startMinute: 0, speedMetersPerSecond: 10 },
-  { startMinute: 330, speedMetersPerSecond: 13.5 },
-  { startMinute: 600, speedMetersPerSecond: 11 },
-  { startMinute: 960, speedMetersPerSecond: 13 },
-  { startMinute: 1_200, speedMetersPerSecond: 9.5 },
-];
 
 interface SubwayTrainCustomLayerOptions {
   serviceRoutes: SeoulSubwayOsmServiceRoute[];
@@ -103,7 +101,7 @@ export function createSubwayTrainCustomLayer({
       directionalLight.position.set(-30, -50, 90);
       scene.add(directionalLight);
 
-      trainRuntimes = serviceRoutes.flatMap((serviceRoute, routeIndex) => {
+      trainRuntimes = serviceRoutes.flatMap((serviceRoute) => {
         const sampler = createSubwayRouteSampler(serviceRoute.path);
 
         if (sampler === undefined) {
@@ -122,9 +120,13 @@ export function createSubwayTrainCustomLayer({
           ),
           carCount: 3,
           carSpacingMeters: CAR_SPACING_METERS,
-          dwellSeconds: 20,
-          phaseOffsetSeconds: routeIndex * 1_370,
-          speedProfile: MOCK_SPEED_PROFILE,
+          cruiseSpeedMetersPerSecond:
+            LINE_2_TRAIN_CRUISE_SPEED_METERS_PER_SECOND,
+          dwellSeconds: LINE_2_TRAIN_DWELL_SECONDS,
+          phaseOffsetSeconds: getLine2TrainPhaseOffsetSeconds(
+            serviceRoute.direction,
+          ),
+          simulationEpochMs: LINE_2_TRAIN_SIMULATION_EPOCH_MS,
         });
 
         scene?.add(model.root);
