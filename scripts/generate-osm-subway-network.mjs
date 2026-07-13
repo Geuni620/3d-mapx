@@ -188,6 +188,7 @@ function createLineNetwork(routeMaster, osm) {
   };
 }
 
+// 한 방향의 지하철 노선 데이터를 열차가 따라갈 경로와 정차역 순서로 정리한다.
 function createServiceRoute(lineNumber, relation, osm) {
   const ways = relation.members
     .filter((member) => member.type === "way")
@@ -274,6 +275,7 @@ function createOrderedServiceStops(lineNumber, relation, nodeMap) {
   return stops;
 }
 
+// 순환 경로의 시작점과 이동 방향을 첫 두 정차역의 운행 순서에 맞춘다.
 function orientAndRotateServicePath(sourcePath, orderedStops) {
   let path = ensureClosedPath(sourcePath);
   const firstStopIndex = findClosestCoordinateIndex(path, orderedStops[0].coordinate);
@@ -323,6 +325,7 @@ function findClosestCoordinateIndex(path, coordinate) {
   return closestIndex;
 }
 
+// 정차역을 운행 경로 위의 가장 가까운 위치로 맞추고 경로 시작점부터의 거리를 계산한다.
 function projectCoordinateOntoPath(coordinate, path) {
   let cumulativeDistanceMeters = 0;
   let bestProjection;
@@ -388,6 +391,7 @@ function getDistanceMeters(first, second) {
   return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
 }
 
+// OSM 태그만으로 방향을 구분하기 어려워 확인된 relation ID를 운행 방향에 연결한다.
 function classifyServiceDirection(relationId, tags) {
   const knownDirections = new Map([
     [2404374, "outer-loop"],
