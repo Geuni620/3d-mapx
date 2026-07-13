@@ -40,6 +40,8 @@ export function createSubwayRouteSampler(
   const firstCoordinate = coordinates[0];
   const lastCoordinate = coordinates.at(-1);
 
+  // 첫 적용 범위인 2호선 외선·내선은 순환선이므로 경로의 끝을 시작점과 연결한다.
+  // 1~8호선 확장 시에는 종착역이 있는 경로를 구분해 처리한다.
   if (!coordinatesEqual(firstCoordinate, lastCoordinate)) {
     coordinates.push([...firstCoordinate]);
   }
