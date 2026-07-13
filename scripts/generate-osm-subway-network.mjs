@@ -351,6 +351,7 @@ function projectCoordinateOntoPath(coordinate, path) {
   return bestProjection;
 }
 
+// 역과 가장 가까운 선로 한 조각 위의 위치가 시작점에서 몇 퍼센트 지점인지 구한다.
 function projectCoordinateOntoSegment(coordinate, start, end) {
   const latitudeScale = Math.cos((coordinate[1] * Math.PI) / 180);
   const deltaX = (end[0] - start[0]) * latitudeScale;
