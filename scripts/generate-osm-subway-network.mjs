@@ -25,7 +25,16 @@ async function main() {
 
   const lineNetworks = [];
 
-  for (const routeMaster of ROUTE_MASTERS) {
+  const requestedLineNumber = getRequestedLineNumber();
+  const routeMasters = requestedLineNumber === undefined
+    ? ROUTE_MASTERS
+    : ROUTE_MASTERS.filter(({ lineNumber }) => lineNumber === requestedLineNumber);
+
+  if (routeMasters.length === 0) {
+    throw new Error(`Unsupported subway line: ${requestedLineNumber}`);
+  }
+
+  for (const routeMaster of routeMasters) {
     const routeMasterXml = await loadRelationXml({
       lineNumber: routeMaster.lineNumber,
       relationId: routeMaster.relationId,
@@ -76,7 +85,9 @@ async function main() {
     ),
   };
 
-  await writeFile(NETWORK_MODULE_FILE, formatNetworkModule(source));
+  if (requestedLineNumber === undefined) {
+    await writeFile(NETWORK_MODULE_FILE, formatNetworkModule(source));
+  }
 }
 
 function writeLineNetworkData(lineNetwork) {
@@ -87,6 +98,7 @@ function writeLineNetworkData(lineNetwork) {
   const data = {
     route: lineNetwork.route,
     stations: lineNetwork.stations,
+    serviceRoutes: lineNetwork.serviceRoutes,
   };
 
   return writeFile(outputFile, `${JSON.stringify(data, null, 2)}\n`);
@@ -148,6 +160,14 @@ function createLineNetwork(routeMaster, osm) {
   );
   const stations = createStations(routeMaster.lineNumber, contributingRelations, osm.nodes);
   const relationIds = contributingRelations.map((relation) => relation.id);
+  const serviceRoutes = contributingRelations
+    .filter((relation) => relation.tags.route === "subway")
+    .map((relation) => createServiceRoute(routeMaster.lineNumber, relation, osm))
+    .filter((serviceRoute) => serviceRoute !== undefined);
+
+  if (routeMaster.lineNumber === 2) {
+    assertLine2ServiceRoutes(serviceRoutes);
+  }
 
   return {
     routeCount: contributingRelations.length,
@@ -164,7 +184,258 @@ function createLineNetwork(routeMaster, osm) {
       pathSegments,
     },
     stations,
+    serviceRoutes,
   };
+}
+
+// 한 방향의 지하철 노선 데이터를 열차가 따라갈 경로와 정차역 순서로 정리한다.
+function createServiceRoute(lineNumber, relation, osm) {
+  const ways = relation.members
+    .filter((member) => member.type === "way")
+    .map((member) => osm.ways.get(member.ref))
+    .filter((way) => way !== undefined);
+  const pathSegments = createConnectedPathSegments(ways, osm.nodes);
+  const longestPath = pathSegments.toSorted(
+    (first, second) => getPathLengthMeters(second) - getPathLengthMeters(first),
+  )[0];
+  const orderedStops = createOrderedServiceStops(lineNumber, relation, osm.nodes);
+
+  if (longestPath === undefined || longestPath.length < 2 || orderedStops.length < 2) {
+    return undefined;
+  }
+
+  const direction = classifyServiceDirection(relation.id, relation.tags);
+  const path = direction === "outer-loop" || direction === "inner-loop"
+    ? orientAndRotateServicePath(longestPath, orderedStops)
+    : orientOpenServicePath(longestPath, orderedStops);
+  const stops = orderedStops.map((stop) => {
+    const projection = projectCoordinateOntoPath(stop.coordinate, path);
+
+    return {
+      id: stop.id,
+      osmNodeId: stop.osmNodeId,
+      name: stop.name,
+      coordinate: projection.coordinate,
+      distanceMeters: Number(projection.distanceMeters.toFixed(2)),
+    };
+  });
+
+  return {
+    id: `line-${lineNumber}-service-${relation.id}`,
+    lineNumber,
+    osmRelationId: relation.id,
+    name: relation.tags["name:ko"] ?? relation.tags.name ?? `${lineNumber}호선`,
+    from: relation.tags.from,
+    to: relation.tags.to,
+    direction,
+    path,
+    stops,
+  };
+}
+
+function orientOpenServicePath(sourcePath, orderedStops) {
+  const firstStopIndex = findClosestCoordinateIndex(sourcePath, orderedStops[0].coordinate);
+  const secondStopIndex = findClosestCoordinateIndex(sourcePath, orderedStops[1].coordinate);
+
+  return secondStopIndex >= firstStopIndex ? sourcePath : [...sourcePath].reverse();
+}
+
+function createOrderedServiceStops(lineNumber, relation, nodeMap) {
+  const stops = [];
+  const stopNames = new Set();
+
+  for (const member of relation.members) {
+    if (member.type !== "node" || !isStopRole(member.role)) {
+      continue;
+    }
+
+    const node = nodeMap.get(member.ref);
+    const name = getStationName(node);
+
+    if (node === undefined || name === undefined) {
+      continue;
+    }
+
+    const normalizedName = normalizeStationName(name);
+
+    if (stopNames.has(normalizedName)) {
+      continue;
+    }
+
+    stopNames.add(normalizedName);
+    stops.push({
+      id: `osm-node-${node.id}`,
+      osmNodeId: node.id,
+      lineNumber,
+      name,
+      coordinate: [node.lon, node.lat],
+    });
+  }
+
+  return stops;
+}
+
+// 순환 경로의 시작점과 이동 방향을 첫 두 정차역의 운행 순서에 맞춘다.
+function orientAndRotateServicePath(sourcePath, orderedStops) {
+  let path = ensureClosedPath(sourcePath);
+  const firstStopIndex = findClosestCoordinateIndex(path, orderedStops[0].coordinate);
+
+  path = rotateClosedPath(path, firstStopIndex);
+
+  const secondStopIndex = findClosestCoordinateIndex(path, orderedStops[1].coordinate);
+
+  if (secondStopIndex > (path.length - 1) / 2) {
+    path = [path[0], ...path.slice(1, -1).reverse(), path[0]];
+  }
+
+  return path;
+}
+
+function ensureClosedPath(path) {
+  const first = path[0];
+  const last = path.at(-1);
+
+  if (first[0] === last[0] && first[1] === last[1]) {
+    return [...path];
+  }
+
+  return [...path, first];
+}
+
+function rotateClosedPath(path, startIndex) {
+  const openPath = path.slice(0, -1);
+  const rotatedPath = [...openPath.slice(startIndex), ...openPath.slice(0, startIndex)];
+
+  return [...rotatedPath, rotatedPath[0]];
+}
+
+function findClosestCoordinateIndex(path, coordinate) {
+  let closestIndex = 0;
+  let closestDistance = Number.POSITIVE_INFINITY;
+
+  for (let index = 0; index < path.length - 1; index += 1) {
+    const distance = getDistanceMeters(path[index], coordinate);
+
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestIndex = index;
+    }
+  }
+
+  return closestIndex;
+}
+
+// 정차역을 운행 경로 위의 가장 가까운 위치로 맞추고 경로 시작점부터의 거리를 계산한다.
+function projectCoordinateOntoPath(coordinate, path) {
+  let cumulativeDistanceMeters = 0;
+  let bestProjection;
+
+  for (let index = 0; index < path.length - 1; index += 1) {
+    const start = path[index];
+    const end = path[index + 1];
+    const segmentLengthMeters = getDistanceMeters(start, end);
+    const projection = projectCoordinateOntoSegment(coordinate, start, end);
+    const offsetMeters = getDistanceMeters(coordinate, projection.coordinate);
+
+    if (bestProjection === undefined || offsetMeters < bestProjection.offsetMeters) {
+      bestProjection = {
+        coordinate: projection.coordinate,
+        distanceMeters: cumulativeDistanceMeters + segmentLengthMeters * projection.ratio,
+        offsetMeters,
+      };
+    }
+
+    cumulativeDistanceMeters += segmentLengthMeters;
+  }
+
+  return bestProjection;
+}
+
+// 역과 가장 가까운 선로 한 조각 위의 위치가 시작점에서 몇 퍼센트 지점인지 구한다.
+function projectCoordinateOntoSegment(coordinate, start, end) {
+  const latitudeScale = Math.cos((coordinate[1] * Math.PI) / 180);
+  const deltaX = (end[0] - start[0]) * latitudeScale;
+  const deltaY = end[1] - start[1];
+  const coordinateX = (coordinate[0] - start[0]) * latitudeScale;
+  const coordinateY = coordinate[1] - start[1];
+  const squaredLength = deltaX * deltaX + deltaY * deltaY;
+  const ratio = squaredLength === 0
+    ? 0
+    : Math.max(0, Math.min(1, (coordinateX * deltaX + coordinateY * deltaY) / squaredLength));
+
+  return {
+    coordinate: [
+      start[0] + (end[0] - start[0]) * ratio,
+      start[1] + (end[1] - start[1]) * ratio,
+    ],
+    ratio,
+  };
+}
+
+function getPathLengthMeters(path) {
+  return path.slice(1).reduce(
+    (total, coordinate, index) => total + getDistanceMeters(path[index], coordinate),
+    0,
+  );
+}
+
+function getDistanceMeters(first, second) {
+  const earthRadiusMeters = 6_371_008.8;
+  const latitudeDelta = ((second[1] - first[1]) * Math.PI) / 180;
+  const longitudeDelta = ((second[0] - first[0]) * Math.PI) / 180;
+  const firstLatitude = (first[1] * Math.PI) / 180;
+  const secondLatitude = (second[1] * Math.PI) / 180;
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(firstLatitude) * Math.cos(secondLatitude) * Math.sin(longitudeDelta / 2) ** 2;
+
+  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
+// OSM 태그만으로 방향을 구분하기 어려워 확인된 relation ID를 운행 방향에 연결한다.
+function classifyServiceDirection(relationId, tags) {
+  const knownDirections = new Map([
+    [2404374, "outer-loop"],
+    [4729409, "inner-loop"],
+    [4729405, "outbound"],
+    [4729406, "inbound"],
+    [4729408, "outbound"],
+    [4729407, "inbound"],
+  ]);
+
+  return knownDirections.get(relationId) ??
+    (tags.roundtrip === "yes" ? "unknown" : "unknown");
+}
+
+function assertLine2ServiceRoutes(serviceRoutes) {
+  const expectedMainRoutes = new Map([
+    [2404374, "outer-loop"],
+    [4729409, "inner-loop"],
+  ]);
+
+  for (const [relationId, direction] of expectedMainRoutes) {
+    const serviceRoute = serviceRoutes.find((route) => route.osmRelationId === relationId);
+
+    if (serviceRoute === undefined || serviceRoute.direction !== direction) {
+      throw new Error(`Unexpected Line 2 service relation: ${relationId}`);
+    }
+  }
+}
+
+function getRequestedLineNumber() {
+  const lineArgumentIndex = process.argv.indexOf("--line");
+
+  if (lineArgumentIndex === -1) {
+    return undefined;
+  }
+
+  const lineNumber = Number(process.argv[lineArgumentIndex + 1]);
+
+  if (!Number.isInteger(lineNumber)) {
+    throw new Error("--line requires an integer line number");
+  }
+
+  return lineNumber;
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {
@@ -540,6 +811,33 @@ export interface SeoulSubwayOsmRoute {
   pathSegments: SubwayCoordinate[][];
 }
 
+export type SubwayServiceDirection =
+  | "outer-loop"
+  | "inner-loop"
+  | "outbound"
+  | "inbound"
+  | "unknown";
+
+export interface SeoulSubwayOsmServiceStop {
+  id: string;
+  osmNodeId: number;
+  name: string;
+  coordinate: SubwayCoordinate;
+  distanceMeters: number;
+}
+
+export interface SeoulSubwayOsmServiceRoute {
+  id: string;
+  lineNumber: SubwayLineNumber;
+  osmRelationId: number;
+  name: string;
+  from?: string;
+  to?: string;
+  direction: SubwayServiceDirection;
+  path: SubwayCoordinate[];
+  stops: SeoulSubwayOsmServiceStop[];
+}
+
 export interface SeoulSubwayOsmStation {
   id: string;
   osmNodeId: number;
@@ -554,12 +852,14 @@ export interface SeoulSubwayOsmStation {
 export interface SeoulSubwayOsmLineNetwork {
   route: SeoulSubwayOsmRoute;
   stations: SeoulSubwayOsmStation[];
+  serviceRoutes?: SeoulSubwayOsmServiceRoute[];
 }
 
 export interface SeoulSubwayOsmNetwork {
   source: SeoulSubwayOsmNetworkSource;
   routes: SeoulSubwayOsmRoute[];
   stations: SeoulSubwayOsmStation[];
+  serviceRoutes: SeoulSubwayOsmServiceRoute[];
 }
 
 const SEOUL_SUBWAY_OSM_LINE_NETWORKS = [
@@ -571,6 +871,9 @@ export const SEOUL_SUBWAY_OSM_NETWORK = {
   routes: SEOUL_SUBWAY_OSM_LINE_NETWORKS.map((lineNetwork) => lineNetwork.route),
   stations: SEOUL_SUBWAY_OSM_LINE_NETWORKS.flatMap(
     (lineNetwork) => lineNetwork.stations,
+  ),
+  serviceRoutes: SEOUL_SUBWAY_OSM_LINE_NETWORKS.flatMap(
+    (lineNetwork) => lineNetwork.serviceRoutes ?? [],
   ),
 } satisfies SeoulSubwayOsmNetwork;
 `;
