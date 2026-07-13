@@ -8,13 +8,13 @@ const TEST_LOOP = [
   [126.97, 37.561],
 ] as const;
 
-describe("createSubwayRouteSampler", () => {
-  it("returns undefined when a path cannot form a route", () => {
+describe("운행 경로 위치 계산", () => {
+  it("좌표가 없거나 하나뿐일 때 운행 경로를 만들면 경로를 만들 수 없음을 반환한다", () => {
     expect(createSubwayRouteSampler([])).toBeUndefined();
     expect(createSubwayRouteSampler([[126.97, 37.56]])).toBeUndefined();
   });
 
-  it("samples a closed route by cumulative meter distance", () => {
+  it("순환 경로 좌표가 주어졌을 때 운행 경로를 만들면 전체 거리와 출발점 위치를 계산한다", () => {
     const sampler = createSubwayRouteSampler(TEST_LOOP);
 
     expect(sampler).toBeDefined();
@@ -22,7 +22,7 @@ describe("createSubwayRouteSampler", () => {
     expect(sampler?.sample(0).coordinate).toEqual(TEST_LOOP[0]);
   });
 
-  it("wraps distances that pass the end of a loop", () => {
+  it("열차가 한 바퀴를 넘는 거리까지 이동했을 때 위치를 조회하면 다음 바퀴의 같은 위치와 방향을 반환한다", () => {
     const sampler = createSubwayRouteSampler(TEST_LOOP);
 
     expect(sampler).toBeDefined();
@@ -38,7 +38,7 @@ describe("createSubwayRouteSampler", () => {
     );
   });
 
-  it("projects a nearby point onto the closest route segment", () => {
+  it("역이 운행 경로에서 떨어져 있을 때 역 위치를 찾으면 경로상 거리와 경로에서 떨어진 거리를 반환한다", () => {
     const sampler = createSubwayRouteSampler(TEST_LOOP);
 
     expect(sampler).toBeDefined();
