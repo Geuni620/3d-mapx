@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   Line2TrainMotionPreview,
+  SubwayBuilderReferenceMotionPreview,
+  SubwayTrainConceptMotionPreview,
   SyntheticTrainMotionPreview,
 } from "./subway-train-preview";
 import { LINE_2_TRAIN_SIMULATION_EPOCH_MS } from "../line-2-train-demo-config";
@@ -57,6 +59,54 @@ export const OppositeDirections: Story = {
   },
   render: ({ progress, speed, paused, showGuides }) => (
     <SyntheticTrainMotionPreview
+      progress={progress}
+      speed={speed}
+      paused={paused}
+      showGuides={showGuides}
+    />
+  ),
+};
+
+export const SixModelConcepts: Story = {
+  args: {
+    progress: 0.42,
+    speed: 0.7,
+    paused: false,
+    showGuides: true,
+    fixedTimestamp: MOVING_LINE_2_TIMESTAMP,
+    live: false,
+  },
+  parameters: {
+    controls: {
+      include: ["progress", "speed", "paused", "showGuides"],
+    },
+  },
+  render: ({ progress, speed, paused, showGuides }) => (
+    <SubwayTrainConceptMotionPreview
+      progress={progress}
+      speed={speed}
+      paused={paused}
+      showGuides={showGuides}
+    />
+  ),
+};
+
+export const SubwayBuilderReference: Story = {
+  args: {
+    progress: 0.58,
+    speed: 0.8,
+    paused: false,
+    showGuides: true,
+    fixedTimestamp: MOVING_LINE_2_TIMESTAMP,
+    live: false,
+  },
+  parameters: {
+    controls: {
+      include: ["progress", "speed", "paused", "showGuides"],
+    },
+  },
+  render: ({ progress, speed, paused, showGuides }) => (
+    <SubwayBuilderReferenceMotionPreview
       progress={progress}
       speed={speed}
       paused={paused}

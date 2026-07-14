@@ -35,10 +35,20 @@ import {
   createSubwayTrainSimulation,
   type SubwayTrainSimulationState,
 } from "../line-2-train-simulation";
-import { createSubwayTrainModel } from "../subway-train-model";
+import { SUBWAY_TRAIN_CAR_SPACING_METERS } from "../subway-train-dimensions";
+import {
+  createSubwayTrainModel,
+  type SubwayTrainModelVariant,
+  updateSubwayTrainGangways,
+} from "../subway-train-model";
+import {
+  createSubwayTrainRibbonModel,
+  getSubwayTrainRibbonProgressBounds,
+} from "../subway-train-ribbon-model";
 import {
   applySubwayTrainModelAppearance,
   createSyntheticTrainCurves,
+  getTrainCurveProgressBounds,
   getSubwayTrainModelMetrics,
   sampleTrainCarPosesOnCurve,
   type SubwayTrainModelMetrics,
@@ -54,6 +64,21 @@ const EMPTY_METRICS: ModelLabMetrics = {
   drawCalls: 0,
 };
 const LINE_2_COLOR = "#00a84d";
+const TRAIN_MODEL_CONCEPTS: Array<{
+  variant: SubwayTrainModelVariant;
+  name: string;
+  lineColor: string;
+  bodyColor: string;
+  laneOffset: number;
+  direction: 1 | -1;
+}> = [
+  { variant: "classic", name: "01 Classic", lineColor: "#00a84d", bodyColor: "#3c4348", laneOffset: -27.5, direction: 1 },
+  { variant: "streamline", name: "02 Streamline", lineColor: "#67e8b1", bodyColor: "#26383d", laneOffset: -16.5, direction: -1 },
+  { variant: "panorama", name: "03 Panorama", lineColor: "#49b7ff", bodyColor: "#33424c", laneOffset: -5.5, direction: 1 },
+  { variant: "compact", name: "04 Compact", lineColor: "#f2c14e", bodyColor: "#4a4540", laneOffset: 5.5, direction: -1 },
+  { variant: "industrial", name: "05 Industrial", lineColor: "#ff7657", bodyColor: "#494d50", laneOffset: 16.5, direction: 1 },
+  { variant: "slim", name: "06 Slim", lineColor: "#d39cff", bodyColor: "#35333f", laneOffset: 27.5, direction: -1 },
+];
 const LINE_2_SERVICE_ROUTES = SEOUL_SUBWAY_OSM_NETWORK.serviceRoutes.filter(
   (route) =>
     route.osmRelationId === 2404374 || route.osmRelationId === 4729409,
@@ -142,7 +167,8 @@ export function SubwayTrainPreview({
       bodyColor,
       carCount: safeCarCount,
     });
-    const trainCenterY = -((safeCarCount - 1) * 21) / 2;
+    const trainCenterY =
+      -((safeCarCount - 1) * SUBWAY_TRAIN_CAR_SPACING_METERS) / 2;
     const camera = getCameraPreset(cameraPreset, trainCenterY);
     const stage = createModelLabStage(container, {
       cameraPosition: camera.position,
@@ -153,8 +179,9 @@ export function SubwayTrainPreview({
     });
 
     train.cars.forEach((car, carIndex) => {
-      car.position.y = -carIndex * 21;
+      car.position.y = -carIndex * SUBWAY_TRAIN_CAR_SPACING_METERS;
     });
+    updateSubwayTrainGangways(train);
     applySubwayTrainModelAppearance(train.root, {
       showWindows,
       showDoors,
@@ -279,6 +306,11 @@ export function SyntheticTrainMotionPreview({
           createCurveGuide(curve, index === 0 ? "#00a84d" : "#64d99b"),
         )
       : [];
+    const progressBounds = getTrainCurveProgressBounds(
+      curves[0],
+      trains[0].cars.length,
+      SUBWAY_TRAIN_CAR_SPACING_METERS,
+    );
 
     trains.forEach((train) => stage.scene.add(train.root));
     guideLines.forEach((guideLine) => stage.scene.add(guideLine));
@@ -292,8 +324,12 @@ export function SyntheticTrainMotionPreview({
     const renderFrame = (time: number) => {
       const elapsedProgress = ((time - startedAt) / 1_000) * speed * 0.08;
       const outboundProgress = paused
-        ? clamp(progress, 0.18, 0.82)
-        : pingPong(progress + elapsedProgress, 0.18, 0.82);
+        ? clamp(progress, progressBounds.minimum, progressBounds.maximum)
+        : pingPong(
+            progress + elapsedProgress,
+            progressBounds.minimum,
+            progressBounds.maximum,
+          );
       const inboundProgress = 1 - outboundProgress;
 
       applyCurvePoses(trains[0], curves[0], outboundProgress, 1);
@@ -324,7 +360,7 @@ export function SyntheticTrainMotionPreview({
   return (
     <ModelLabSurface
       title="Opposite directions"
-      description="평행한 synthetic S-curve에서 두 3량 열차가 서로 반대 tangent를 따라 움직입니다."
+      description="완만한 synthetic S-curve에서 앞뒤 대차와 차량 연결부가 3량 편성을 부드럽게 이어 줍니다."
       metrics={metrics}
     >
       <div
@@ -332,6 +368,259 @@ export function SyntheticTrainMotionPreview({
         className="model-lab-canvas"
         data-testid="subway-train-motion-canvas"
         data-motion-source="synthetic-s-curve"
+      />
+    </ModelLabSurface>
+  );
+}
+
+export function SubwayTrainConceptMotionPreview({
+  progress,
+  speed,
+  paused,
+  showGuides,
+}: SyntheticTrainMotionPreviewProps) {
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
+  const [metrics, setMetrics] = useState<ModelLabMetrics>(EMPTY_METRICS);
+
+  useEffect(() => {
+    if (container === null) {
+      return;
+    }
+
+    const stage = createModelLabStage(container, {
+      cameraPosition: new Vector3(104, -118, 142),
+      cameraTarget: new Vector3(0, 0, 5),
+      lightIntensity: 2.5,
+      orbitEnabled: true,
+      gridSize: 240,
+    });
+    const curves = createSyntheticTrainCurves(
+      TRAIN_MODEL_CONCEPTS.map((concept) => concept.laneOffset),
+    );
+    const trains = TRAIN_MODEL_CONCEPTS.map((concept) =>
+      createSubwayTrainModel({
+        variant: concept.variant,
+        lineColor: concept.lineColor,
+        bodyColor: concept.bodyColor,
+        carCount: 2,
+      }),
+    );
+    const guideLines = showGuides
+      ? curves.map((curve, index) =>
+          createCurveGuide(curve, TRAIN_MODEL_CONCEPTS[index].lineColor),
+        )
+      : [];
+    const progressBounds = getTrainCurveProgressBounds(
+      curves[0],
+      2,
+      SUBWAY_TRAIN_CAR_SPACING_METERS,
+    );
+
+    trains.forEach((train) => stage.scene.add(train.root));
+    guideLines.forEach((guideLine) => stage.scene.add(guideLine));
+
+    const initialMetrics = mergeMetrics(
+      trains.map((train) => getSubwayTrainModelMetrics(train.root)),
+    );
+    const startedAt = performance.now();
+    let animationFrame = 0;
+    let metricsCommitted = false;
+    const renderFrame = (time: number) => {
+      const elapsedProgress = ((time - startedAt) / 1_000) * speed * 0.06;
+      const forwardProgress = paused
+        ? clamp(progress, progressBounds.minimum, progressBounds.maximum)
+        : pingPong(
+            progress + elapsedProgress,
+            progressBounds.minimum,
+            progressBounds.maximum,
+          );
+
+      trains.forEach((train, index) => {
+        const direction = TRAIN_MODEL_CONCEPTS[index].direction;
+
+        applyCurvePoses(
+          train,
+          curves[index],
+          direction === 1 ? forwardProgress : 1 - forwardProgress,
+          direction,
+        );
+      });
+      stage.render();
+
+      if (!metricsCommitted) {
+        metricsCommitted = true;
+        setMetrics({
+          ...initialMetrics,
+          drawCalls: stage.renderer.info.render.calls,
+        });
+      }
+
+      if (!paused) {
+        animationFrame = requestAnimationFrame(renderFrame);
+      }
+    };
+
+    renderFrame(performance.now());
+
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      guideLines.forEach(disposeObjectResources);
+      trains.forEach((train) => train.dispose());
+      stage.dispose();
+    };
+  }, [container, paused, progress, showGuides, speed]);
+
+  return (
+    <ModelLabSurface
+      title="Six train concepts · Motion comparison"
+      description="서로 다른 차체 비율과 전면부를 가진 6개 procedural 시안을 동일한 S-curve에서 비교합니다."
+      metrics={metrics}
+      routeLabels={<TrainConceptLabels />}
+    >
+      <div
+        ref={setContainer}
+        className="model-lab-canvas"
+        data-testid="subway-train-concept-motion-canvas"
+        data-motion-source="six-model-concepts"
+      />
+    </ModelLabSurface>
+  );
+}
+
+export function SubwayBuilderReferenceMotionPreview({
+  progress,
+  speed,
+  paused,
+  showGuides,
+}: SyntheticTrainMotionPreviewProps) {
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
+  const [metrics, setMetrics] = useState<ModelLabMetrics>(EMPTY_METRICS);
+
+  useEffect(() => {
+    if (container === null) {
+      return;
+    }
+
+    const stage = createModelLabStage(container, {
+      cameraPosition: new Vector3(92, -112, 132),
+      cameraTarget: new Vector3(0, 0, 3),
+      lightIntensity: 2.2,
+      orbitEnabled: true,
+      gridSize: 190,
+      theme: "map",
+    });
+    const [rigidCurve, ribbonCurve, metroCurve] = createSyntheticTrainCurves([
+      -12, 0, 12,
+    ]);
+    const rigidTrain = createSubwayTrainModel({
+      lineColor: "#00a84d",
+      bodyColor: "#4d5559",
+      carCount: 3,
+    });
+    const ribbonTrain = createSubwayTrainRibbonModel({
+      bodyColor: "#34393b",
+      lineColor: "#00a84d",
+      lengthMeters: SUBWAY_TRAIN_CAR_SPACING_METERS * 3,
+      widthMeters: 3.6,
+      heightMeters: 2.8,
+      segmentCount: 56,
+    });
+    const metroTrain = createSubwayTrainRibbonModel({
+      appearance: "metro",
+      bodyColor: "#aeb8ba",
+      lineColor: "#00a84d",
+      lengthMeters: SUBWAY_TRAIN_CAR_SPACING_METERS * 3,
+      widthMeters: 3.75,
+      heightMeters: 3.1,
+      segmentCount: 56,
+    });
+    const guideLines = showGuides
+      ? [
+          createCurveGuide(rigidCurve, "#67706d"),
+          createCurveGuide(ribbonCurve, "#151a19"),
+          createCurveGuide(metroCurve, "#65726d"),
+        ]
+      : [];
+    const rigidBounds = getTrainCurveProgressBounds(
+      rigidCurve,
+      rigidTrain.cars.length,
+      SUBWAY_TRAIN_CAR_SPACING_METERS,
+    );
+    const ribbonBounds = getSubwayTrainRibbonProgressBounds(
+      ribbonCurve,
+      ribbonTrain.lengthMeters,
+    );
+    const progressBounds = {
+      minimum: Math.max(rigidBounds.minimum, ribbonBounds.minimum),
+      maximum: Math.min(rigidBounds.maximum, ribbonBounds.maximum),
+    };
+
+    stage.scene.add(rigidTrain.root, ribbonTrain.root, metroTrain.root);
+    guideLines.forEach((guideLine) => stage.scene.add(guideLine));
+
+    const initialMetrics = mergeMetrics([
+      getSubwayTrainModelMetrics(rigidTrain.root),
+      getSubwayTrainModelMetrics(ribbonTrain.root),
+      getSubwayTrainModelMetrics(metroTrain.root),
+    ]);
+    const shouldReduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const startedAt = performance.now();
+    let animationFrame = 0;
+    let metricsCommitted = false;
+    const renderFrame = (time: number) => {
+      const elapsedProgress = ((time - startedAt) / 1_000) * speed * 0.055;
+      const currentProgress = paused || shouldReduceMotion
+        ? clamp(progress, progressBounds.minimum, progressBounds.maximum)
+        : pingPong(
+            progress + elapsedProgress,
+            progressBounds.minimum,
+            progressBounds.maximum,
+          );
+
+      applyCurvePoses(rigidTrain, rigidCurve, currentProgress, 1);
+      ribbonTrain.update(ribbonCurve, currentProgress, 1);
+      metroTrain.update(metroCurve, currentProgress, 1);
+      stage.render();
+
+      if (!metricsCommitted) {
+        metricsCommitted = true;
+        setMetrics({
+          ...initialMetrics,
+          drawCalls: stage.renderer.info.render.calls,
+        });
+      }
+
+      if (!paused && !shouldReduceMotion) {
+        animationFrame = requestAnimationFrame(renderFrame);
+      }
+    };
+
+    renderFrame(performance.now());
+
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      guideLines.forEach(disposeObjectResources);
+      rigidTrain.dispose();
+      ribbonTrain.dispose();
+      metroTrain.dispose();
+      stage.dispose();
+    };
+  }, [container, paused, progress, showGuides, speed]);
+
+  return (
+    <ModelLabSurface
+      title="Subway Builder reference · Flexible body"
+      description="현재 3량 모델, 영상의 단순 리본, 창문·노선 띠를 추가한 Metro Ribbon을 같은 곡선에서 비교합니다."
+      metrics={metrics}
+      routeLabels={<SubwayBuilderReferenceLabels />}
+    >
+      <div
+        ref={setContainer}
+        className="model-lab-canvas"
+        data-testid="subway-builder-reference-motion-canvas"
+        data-motion-source="continuous-spline-ribbon"
       />
     </ModelLabSurface>
   );
@@ -388,7 +677,7 @@ export function Line2TrainMotionPreview({
           (stop) => stop.distanceMeters,
         ),
         carCount: 3,
-        carSpacingMeters: 21,
+        carSpacingMeters: SUBWAY_TRAIN_CAR_SPACING_METERS,
         cruiseSpeedMetersPerSecond:
           LINE_2_TRAIN_CRUISE_SPEED_METERS_PER_SECOND,
         dwellSeconds: LINE_2_TRAIN_DWELL_SECONDS,
@@ -449,6 +738,7 @@ export function Line2TrainMotionPreview({
             car.rotation.set(0, 0, -pose.headingRadians);
             car.scale.setScalar(sceneScale);
           });
+          updateSubwayTrainGangways(train);
 
           if (guideLine !== undefined) {
             const guidePoints = Array.from({ length: 49 }, (_, pointIndex) => {
@@ -658,6 +948,38 @@ function Line2RouteLabels({
   );
 }
 
+function TrainConceptLabels() {
+  return (
+    <div className="model-lab-route-labels model-lab-concept-labels">
+      {TRAIN_MODEL_CONCEPTS.map((concept) => (
+        <div className="model-lab-route-label" key={concept.variant}>
+          <strong style={{ color: concept.lineColor }}>{concept.name}</strong>
+          <span>{concept.variant}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SubwayBuilderReferenceLabels() {
+  return (
+    <div className="model-lab-route-labels model-lab-reference-labels">
+      <div className="model-lab-route-label">
+        <strong style={{ color: "#aeb8b4" }}>현재 모델</strong>
+        <span>3 rigid cars · bogie chord</span>
+      </div>
+      <div className="model-lab-route-label">
+        <strong style={{ color: "#00a84d" }}>영상 참고 모델</strong>
+        <span>1 flexible ribbon · 56 samples</span>
+      </div>
+      <div className="model-lab-route-label">
+        <strong style={{ color: "#b9d9cb" }}>Metro Ribbon</strong>
+        <span>window band · route stripe</span>
+      </div>
+    </div>
+  );
+}
+
 function createModelLabStage(
   container: HTMLDivElement,
   {
@@ -666,12 +988,14 @@ function createModelLabStage(
     lightIntensity,
     orbitEnabled,
     gridSize,
+    theme = "dark",
   }: {
     cameraPosition: Vector3;
     cameraTarget: Vector3;
     lightIntensity: number;
     orbitEnabled: boolean;
     gridSize: number;
+    theme?: "dark" | "map";
   },
 ): ModelLabStage {
   const scene = new Scene();
@@ -683,7 +1007,9 @@ function createModelLabStage(
   camera.lookAt(cameraTarget);
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setClearColor("#05090c", 1);
+  const isMapTheme = theme === "map";
+
+  renderer.setClearColor(isMapTheme ? "#e8ece9" : "#05090c", 1);
   container.append(renderer.domElement);
 
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -695,16 +1021,29 @@ function createModelLabStage(
   controls.enablePan = orbitEnabled;
   controls.update();
 
-  scene.add(new AmbientLight("#b9d8d2", lightIntensity * 0.7));
+  scene.add(
+    new AmbientLight(
+      isMapTheme ? "#ffffff" : "#b9d8d2",
+      lightIntensity * (isMapTheme ? 0.95 : 0.7),
+    ),
+  );
 
   const keyLight = new DirectionalLight("#ffffff", lightIntensity);
-  const rimLight = new DirectionalLight("#65dca1", lightIntensity * 0.78);
+  const rimLight = new DirectionalLight(
+    isMapTheme ? "#d4e2db" : "#65dca1",
+    lightIntensity * 0.78,
+  );
 
   keyLight.position.set(36, 48, 70);
   rimLight.position.set(-44, -28, 42);
   scene.add(keyLight, rimLight);
 
-  const grid = new GridHelper(gridSize, 30, "#24493f", "#12272a");
+  const grid = new GridHelper(
+    gridSize,
+    30,
+    isMapTheme ? "#b9c1bd" : "#24493f",
+    isMapTheme ? "#d7ddda" : "#12272a",
+  );
 
   grid.rotation.x = Math.PI / 2;
   grid.position.z = -0.04;
@@ -780,7 +1119,7 @@ function applyCurvePoses(
     progress,
     direction,
     carCount: train.cars.length,
-    carSpacing: 21,
+    carSpacing: SUBWAY_TRAIN_CAR_SPACING_METERS,
   });
 
   poses.forEach((pose, carIndex) => {
@@ -790,6 +1129,7 @@ function applyCurvePoses(
     car.position.z = 0.2;
     car.rotation.set(0, 0, pose.headingRadians);
   });
+  updateSubwayTrainGangways(train);
 }
 
 function coordinateToLocalMeters(

@@ -8,6 +8,7 @@ import {
   type BufferGeometry,
   type Curve,
 } from "three";
+import { SUBWAY_TRAIN_BOGIE_OFFSET_METERS } from "../subway-train-dimensions";
 
 export interface SubwayTrainModelLabAppearance {
   showWindows: boolean;
@@ -127,23 +128,29 @@ export function getSubwayTrainModelMetrics(
 export function createSyntheticTrainCurves(): [
   CatmullRomCurve3,
   CatmullRomCurve3,
-] {
+];
+export function createSyntheticTrainCurves(
+  laneOffsets: number[],
+): CatmullRomCurve3[];
+export function createSyntheticTrainCurves(
+  laneOffsets = [-3.4, 3.4],
+): CatmullRomCurve3[] {
   const createCurve = (laneOffset: number) =>
     new CatmullRomCurve3(
       [
-        new Vector3(-7 + laneOffset, -62, 0),
-        new Vector3(15 + laneOffset, -34, 0),
-        new Vector3(12 + laneOffset, -8, 0),
-        new Vector3(-14 + laneOffset, 18, 0),
-        new Vector3(-11 + laneOffset, 42, 0),
-        new Vector3(8 + laneOffset, 64, 0),
+        new Vector3(-4 + laneOffset, -62, 0),
+        new Vector3(9 + laneOffset, -34, 0),
+        new Vector3(7 + laneOffset, -8, 0),
+        new Vector3(-9 + laneOffset, 18, 0),
+        new Vector3(-7 + laneOffset, 42, 0),
+        new Vector3(5 + laneOffset, 64, 0),
       ],
       false,
       "catmullrom",
       0.35,
     );
 
-  return [createCurve(-3.4), createCurve(3.4)];
+  return laneOffsets.map(createCurve);
 }
 
 export function sampleTrainCarPosesOnCurve({
@@ -153,7 +160,9 @@ export function sampleTrainCarPosesOnCurve({
   carCount,
   carSpacing,
 }: SampleTrainCarPosesOptions): ModelLabTrainCarPose[] {
-  const spacingProgress = carSpacing / curve.getLength();
+  const curveLength = curve.getLength();
+  const spacingProgress = carSpacing / curveLength;
+  const bogieProgress = SUBWAY_TRAIN_BOGIE_OFFSET_METERS / curveLength;
 
   return Array.from({ length: carCount }, (_, carIndex) => {
     const carProgress = clamp(
@@ -161,15 +170,36 @@ export function sampleTrainCarPosesOnCurve({
       0,
       1,
     );
-    const position = curve.getPointAt(carProgress);
-    const tangent = curve.getTangentAt(carProgress).multiplyScalar(direction);
+    const rearBogie = curve.getPointAt(
+      clamp(carProgress - direction * bogieProgress, 0, 1),
+    );
+    const frontBogie = curve.getPointAt(
+      clamp(carProgress + direction * bogieProgress, 0, 1),
+    );
+    const position = rearBogie.clone().lerp(frontBogie, 0.5);
+    const bogieChord = frontBogie.clone().sub(rearBogie);
 
     return {
       carIndex,
       position,
-      headingRadians: -Math.atan2(tangent.x, tangent.y),
+      headingRadians: -Math.atan2(bogieChord.x, bogieChord.y),
     };
   });
+}
+
+export function getTrainCurveProgressBounds(
+  curve: Curve<Vector3>,
+  carCount: number,
+  carSpacing: number,
+) {
+  const curveLength = curve.getLength();
+  const trailingDistance = Math.max(0, carCount - 1) * carSpacing;
+
+  return {
+    minimum:
+      (trailingDistance + SUBWAY_TRAIN_BOGIE_OFFSET_METERS) / curveLength,
+    maximum: 1 - SUBWAY_TRAIN_BOGIE_OFFSET_METERS / curveLength,
+  };
 }
 
 function getGeometryTriangleCount(geometry: BufferGeometry) {

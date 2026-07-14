@@ -58,6 +58,16 @@ body {
   backdrop-filter: blur(16px);
 }
 
+.model-lab-concept-labels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(112px, 1fr));
+}
+
+.model-lab-reference-labels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(132px, 1fr));
+}
+
 .model-lab-header {
   top: 20px;
   left: 20px;
