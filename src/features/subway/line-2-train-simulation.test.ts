@@ -14,8 +14,8 @@ const TEST_LOOP = [
 
 const KOREAN_MIDNIGHT = Date.UTC(2026, 6, 9, 15, 0, 0);
 
-describe("getKoreanMinuteOfDay", () => {
-  it("uses Asia/Seoul instead of the runtime timezone", () => {
+describe("한국 시간 계산", () => {
+  it("실행 환경의 시간대가 다를 때 한국 시각을 계산하면 Asia/Seoul 기준 하루 경과 분을 반환한다", () => {
     expect(getKoreanMinuteOfDay(KOREAN_MIDNIGHT)).toBe(0);
     expect(getKoreanMinuteOfDay(KOREAN_MIDNIGHT + 6 * 60 * 60 * 1000)).toBe(
       360,
@@ -23,8 +23,8 @@ describe("getKoreanMinuteOfDay", () => {
   });
 });
 
-describe("createSubwayTrainSimulation", () => {
-  it("returns the same state for the same timestamp", () => {
+describe("2호선 열차 운행 시뮬레이션", () => {
+  it("같은 시각이 주어졌을 때 열차 상태를 조회하면 항상 같은 운행 상태를 반환한다", () => {
     const simulation = createTestSimulation();
     const timestamp = KOREAN_MIDNIGHT + 12_345;
 
@@ -33,7 +33,7 @@ describe("createSubwayTrainSimulation", () => {
     );
   });
 
-  it("dwells at a stop before moving", () => {
+  it("열차가 역에 도착했을 때 운행 상태를 조회하면 정차한 뒤 다음 역으로 이동한다", () => {
     const simulation = createTestSimulation();
 
     const dwelling = simulation.getState(KOREAN_MIDNIGHT + 1_000);
@@ -46,7 +46,7 @@ describe("createSubwayTrainSimulation", () => {
     expect(moving.frontDistanceMeters).toBeGreaterThan(0);
   });
 
-  it("returns a separate pose for every car", () => {
+  it("여러 칸으로 구성된 열차가 이동할 때 운행 상태를 조회하면 차량마다 서로 다른 위치와 방향을 반환한다", () => {
     const simulation = createTestSimulation();
     const state = simulation.getState(KOREAN_MIDNIGHT + 15_000);
 
@@ -59,7 +59,7 @@ describe("createSubwayTrainSimulation", () => {
     );
   });
 
-  it("changes the active mock speed profile by Korean time", () => {
+  it("한국 시간대별 속도가 설정되어 있을 때 운행 상태를 조회하면 해당 시간의 속도를 적용한다", () => {
     const simulation = createTestSimulation();
 
     const normal = simulation.getState(KOREAN_MIDNIGHT + 3_000);
