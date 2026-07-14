@@ -1,5 +1,9 @@
 import type { SubwayCoordinate } from "./osm-subway-network";
-import type { SubwayRouteSampler } from "./subway-route-sampler";
+import {
+  sampleSubwayRouteChordPose,
+  type SubwayRouteSampler,
+} from "./subway-route-sampler";
+import { SUBWAY_TRAIN_BOGIE_OFFSET_METERS } from "./subway-train-dimensions";
 
 export interface SubwayTrainCarPose {
   carIndex: number;
@@ -141,7 +145,11 @@ function createSimulationState(
         frontDistanceMeters - carIndex * options.carSpacingMeters,
         routeLengthMeters,
       );
-      const pose = options.sampler.sample(distanceMeters);
+      const pose = sampleSubwayRouteChordPose(
+        options.sampler,
+        distanceMeters,
+        SUBWAY_TRAIN_BOGIE_OFFSET_METERS,
+      );
 
       return {
         carIndex,

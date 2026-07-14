@@ -27,12 +27,13 @@ import {
 import {
   createSubwayTrainModel,
   type SubwayTrainModel,
+  updateSubwayTrainGangways,
 } from "./subway-train-model";
+import { SUBWAY_TRAIN_CAR_SPACING_METERS } from "./subway-train-dimensions";
 
 const LINE_2_COLOR = "#00a84d";
 const TRAIN_DISPLAY_ALTITUDE_METERS = 3.5;
 const TRAIN_CROSS_SECTION_SCALE = 1.55;
-const CAR_SPACING_METERS = 21;
 
 interface SubwayTrainCustomLayerOptions {
   serviceRoutes: SeoulSubwayOsmServiceRoute[];
@@ -116,7 +117,7 @@ export function createSubwayTrainCustomLayer({
             (stop) => stop.distanceMeters,
           ),
           carCount: 3,
-          carSpacingMeters: CAR_SPACING_METERS,
+          carSpacingMeters: SUBWAY_TRAIN_CAR_SPACING_METERS,
           cruiseSpeedMetersPerSecond:
             LINE_2_TRAIN_CRUISE_SPEED_METERS_PER_SECOND,
           dwellSeconds: LINE_2_TRAIN_DWELL_SECONDS,
@@ -174,6 +175,7 @@ export function createSubwayTrainCustomLayer({
             meterScale * TRAIN_CROSS_SECTION_SCALE,
           );
         });
+        updateSubwayTrainGangways(model);
       });
 
       camera.projectionMatrix

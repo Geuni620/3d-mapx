@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { Mesh, MeshStandardMaterial } from "three";
-import { createSubwayTrainModel } from "./subway-train-model";
+import {
+  createSubwayTrainModel,
+  updateSubwayTrainGangways,
+} from "./subway-train-model";
 
 describe("createSubwayTrainModel", () => {
   it("creates three independently transformable cars with shared geometry", () => {
@@ -10,7 +13,8 @@ describe("createSubwayTrainModel", () => {
     });
 
     expect(model.cars).toHaveLength(3);
-    expect(model.root.children).toEqual(model.cars);
+    expect(model.root.children).toEqual([...model.cars, ...model.gangways]);
+    expect(model.gangways).toHaveLength(2);
 
     const bodyMeshes = model.cars.map((car) =>
       car.getObjectByName("train-car-body"),
@@ -22,6 +26,25 @@ describe("createSubwayTrainModel", () => {
     );
     expect(model.cars[0].getObjectByName("train-headlights")).toBeDefined();
     expect(model.cars[2].getObjectByName("train-tail-lights")).toBeDefined();
+
+    model.dispose();
+  });
+
+  it("connects adjacent car body ends with dynamically sized gangways", () => {
+    const model = createSubwayTrainModel({
+      lineColor: "#00a84d",
+      carCount: 3,
+    });
+
+    model.cars.forEach((car, carIndex) => {
+      car.position.y = -carIndex * 21;
+    });
+    updateSubwayTrainGangways(model);
+
+    expect(model.gangways[0].position.y).toBeCloseTo(-10.5, 5);
+    expect(model.gangways[0].scale.y).toBeCloseTo(1.5, 5);
+    expect(model.gangways[1].position.y).toBeCloseTo(-31.5, 5);
+    expect(model.root.getObjectByName("train-gangway")).toBeDefined();
 
     model.dispose();
   });
