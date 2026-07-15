@@ -15,6 +15,15 @@ import type { SubwayLineNumber } from "../features/subway/subway-constants";
 import type { SubwayLayerVisibility } from "../features/subway/subway-layer-visibility";
 import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-ids";
 import { SeoulSubwayLayers } from "./seoul-subway-layers";
+import { SubwayTrainLayer } from "./subway-train-layer";
+
+// 현재는 선발대로 2호선 본선의 외선·내선 운행 경로만 열차 레이어에 전달한다.
+const LINE_2_MAIN_SERVICE_ROUTES = SEOUL_SUBWAY_OSM_NETWORK.serviceRoutes.filter(
+  (serviceRoute) =>
+    serviceRoute.lineNumber === 2 &&
+    (serviceRoute.direction === "outer-loop" ||
+      serviceRoute.direction === "inner-loop"),
+);
 
 interface SeoulSubwayMapProps {
   selectedLineNumbers: SubwayLineNumber[];
@@ -40,7 +49,6 @@ export function SeoulSubwayMap({
     () => createSubwayDisplayStations(visibleStations),
     [visibleStations],
   );
-  const visualLevelId = visualLevel.id;
   const subwayDeckLayers = useMemo(
     () =>
       createSubwayDeckLayers(
@@ -49,7 +57,7 @@ export function SeoulSubwayMap({
         layerVisibility,
         visualLevel,
       ),
-    [displayStations, layerVisibility, selectedLineNumbers, visualLevelId],
+    [displayStations, layerVisibility, selectedLineNumbers, visualLevel],
   );
 
   return (
@@ -67,6 +75,14 @@ export function SeoulSubwayMap({
     >
       <SeoulSubwayLayers stations={displayStations} />
       <DeckRouteOverlay layers={subwayDeckLayers} />
+      <SubwayTrainLayer
+        isActive={
+          selectedLineNumbers.includes(2) &&
+          layerVisibility.isTrainLayerVisible &&
+          visualLevel.id === "inspection"
+        }
+        serviceRoutes={LINE_2_MAIN_SERVICE_ROUTES}
+      />
     </Map>
   );
 }
