@@ -16,17 +16,18 @@ import { createSubwayRouteSampler } from "./subway-route-sampler";
 import { SUBWAY_TRAIN_LAYER_ID } from "./subway-layer-ids";
 import {
   createSubwayTrainSimulation,
+  type SubwayTrainCarPose,
   type SubwayTrainSimulation,
 } from "./line-2-train-simulation";
 import {
   createSubwayTrainModel,
   type SubwayTrainModel,
 } from "./subway-train-model";
+import { SUBWAY_TRAIN_CAR_SPACING_METERS } from "./subway-train-dimensions";
 
 const LINE_2_COLOR = "#00a84d";
-const TRAIN_DISPLAY_ALTITUDE_METERS = 3.5;
+const TRAIN_DISPLAY_ALTITUDE_METERS = 0;
 const TRAIN_CROSS_SECTION_SCALE = 1.55;
-const CAR_SPACING_METERS = 21;
 // 실제 운행 자료로 교체하기 전까지 시간대별 속도를 임의 값으로 사용한다.
 const MOCK_SPEED_PROFILE = [
   { startMinute: 0, speedMetersPerSecond: 10 },
@@ -39,6 +40,7 @@ const MOCK_SPEED_PROFILE = [
 interface SubwayTrainCustomLayerOptions {
   serviceRoutes: SeoulSubwayOsmServiceRoute[];
   reducedMotion: boolean;
+  onLeadTrainPose?: (pose: SubwayTrainCarPose) => boolean;
 }
 
 interface TrainRuntime {
@@ -50,15 +52,19 @@ interface TrainRuntime {
 export function createSubwayTrainCustomLayer({
   serviceRoutes,
   reducedMotion,
+  onLeadTrainPose,
 }: SubwayTrainCustomLayerOptions): CustomLayerInterface {
   let map: MapLibreMap | undefined;
   let renderer: WebGLRenderer | undefined;
   let scene: Scene | undefined;
   let camera: Camera | undefined;
   let anchor: MercatorCoordinate | undefined;
+  const anchorTransform = new Matrix4();
   let trainRuntimes: TrainRuntime[] = [];
   let isContextAvailable = true;
   let frozenTimestamp = Date.now();
+  let simulationEpochTimestamp = Date.now();
+  let simulationStartedAt = performance.now();
 
   // WebGL 작업 공간이 사라지면 그리기를 멈추고, 복구되면 현재 시점부터 다시 그린다.
   const handleContextLost = () => {
@@ -76,6 +82,9 @@ export function createSubwayTrainCustomLayer({
     renderingMode: "3d",
     // 레이어가 지도에 추가될 때 장면, 조명, 열차 모형과 시뮬레이션을 준비한다.
     onAdd(nextMap, gl) {
+      simulationEpochTimestamp = Date.now();
+      simulationStartedAt = performance.now();
+      frozenTimestamp = simulationEpochTimestamp;
       map = nextMap;
       scene = new Scene();
       camera = new Camera();
@@ -96,6 +105,7 @@ export function createSubwayTrainCustomLayer({
         { lng: firstCoordinate[0], lat: firstCoordinate[1] },
         TRAIN_DISPLAY_ALTITUDE_METERS,
       );
+      anchorTransform.makeTranslation(anchor.x, anchor.y, anchor.z);
       scene.add(new AmbientLight("#b8d6dd", 1.8));
 
       const directionalLight = new DirectionalLight("#ffffff", 2.4);
@@ -121,7 +131,7 @@ export function createSubwayTrainCustomLayer({
             (stop) => stop.distanceMeters,
           ),
           carCount: 3,
-          carSpacingMeters: CAR_SPACING_METERS,
+          carSpacingMeters: SUBWAY_TRAIN_CAR_SPACING_METERS,
           dwellSeconds: 20,
           phaseOffsetSeconds: routeIndex * 1_370,
           speedProfile: MOCK_SPEED_PROFILE,
@@ -151,10 +161,17 @@ export function createSubwayTrainCustomLayer({
         return;
       }
 
-      const timestamp = reducedMotion ? frozenTimestamp : Date.now();
+      const timestamp = reducedMotion
+        ? frozenTimestamp
+        : simulationEpochTimestamp + (performance.now() - simulationStartedAt);
+      let leadTrainPose: SubwayTrainCarPose | undefined;
 
-      trainRuntimes.forEach(({ simulation, model }) => {
+      trainRuntimes.forEach(({ simulation, model }, runtimeIndex) => {
         const state = simulation.getState(timestamp);
+
+        if (runtimeIndex === 0 && state.carPoses[0] !== undefined) {
+          leadTrainPose = state.carPoses[0];
+        }
 
         state.carPoses.forEach((pose, carIndex) => {
           const coordinate = MercatorCoordinate.fromLngLat(
@@ -173,23 +190,23 @@ export function createSubwayTrainCustomLayer({
           car.scale.set(
             meterScale * TRAIN_CROSS_SECTION_SCALE,
             meterScale,
-            meterScale * TRAIN_CROSS_SECTION_SCALE,
+            meterScale,
           );
         });
       });
 
       camera.projectionMatrix
         .fromArray(defaultProjectionData.mainMatrix)
-        .multiply(
-          new Matrix4().makeTranslation(anchor.x, anchor.y, anchor.z),
-        );
+        .multiply(anchorTransform);
       renderer.resetState();
       // 건물 depth만 비워 열차는 운영용 x-ray overlay로 보이면서 차량 내부 depth는 유지한다.
       renderer.clearDepth();
       renderer.render(scene, camera);
       renderer.resetState();
+      const didMoveCamera =
+        leadTrainPose !== undefined && onLeadTrainPose?.(leadTrainPose) === true;
 
-      if (!reducedMotion) {
+      if (!reducedMotion && !didMoveCamera) {
         map?.triggerRepaint();
       }
     },

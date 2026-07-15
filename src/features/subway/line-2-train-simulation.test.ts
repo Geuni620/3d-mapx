@@ -42,8 +42,26 @@ describe("2호선 열차 운행 시뮬레이션", () => {
     expect(dwelling.phase).toBe("dwelling");
     expect(dwelling.speedMetersPerSecond).toBe(0);
     expect(moving.phase).toBe("moving");
-    expect(moving.speedMetersPerSecond).toBe(10);
+    expect(moving.speedMetersPerSecond).toBeGreaterThan(0);
+    expect(moving.speedMetersPerSecond).toBeLessThan(10);
     expect(moving.frontDistanceMeters).toBeGreaterThan(0);
+  });
+
+  it("열차가 출발할 때 밀리초 단위 위치와 속도, 가속도가 연속적으로 증가한다", () => {
+    const simulation = createTestSimulation();
+    const first = simulation.getState(KOREAN_MIDNIGHT + 2_100);
+    const second = simulation.getState(KOREAN_MIDNIGHT + 2_200);
+
+    expect(second.frontDistanceMeters).toBeGreaterThan(
+      first.frontDistanceMeters,
+    );
+    expect(second.speedMetersPerSecond).toBeGreaterThan(
+      first.speedMetersPerSecond,
+    );
+    expect(second.accelerationMetersPerSecondSquared).toBeGreaterThan(
+      first.accelerationMetersPerSecondSquared,
+    );
+    expect(second.accelerationMetersPerSecondSquared).toBeLessThanOrEqual(0.9);
   });
 
   it("여러 칸으로 구성된 열차가 이동할 때 운행 상태를 조회하면 차량마다 서로 다른 위치와 방향을 반환한다", () => {
@@ -64,11 +82,11 @@ describe("2호선 열차 운행 시뮬레이션", () => {
 
     const normal = simulation.getState(KOREAN_MIDNIGHT + 3_000);
     const slower = simulation.getState(
-      KOREAN_MIDNIGHT + 6 * 60 * 60 * 1000 + 3_000,
+      KOREAN_MIDNIGHT + 6 * 60 * 60 * 1000 + 120_000,
     );
 
-    expect(normal.speedMetersPerSecond).toBe(10);
-    expect(slower.speedMetersPerSecond).toBe(5);
+    expect(normal.speedMetersPerSecond).toBeLessThanOrEqual(10);
+    expect(slower.speedMetersPerSecond).toBeLessThanOrEqual(5);
   });
 });
 
