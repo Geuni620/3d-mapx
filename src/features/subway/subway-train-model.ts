@@ -23,6 +23,7 @@ export interface SubwayTrainModel {
   dispose: () => void;
 }
 
+// 여러 차량을 하나의 열차로 묶고, 모든 차량이 같은 도형과 재질을 함께 쓰도록 만든다.
 export function createSubwayTrainModel({
   lineColor,
   bodyColor,
@@ -47,6 +48,7 @@ export function createSubwayTrainModel({
     root,
     cars,
     dispose() {
+      // 여러 차량이 함께 사용하던 도형과 재질을 GPU 메모리에서 해제한다.
       Object.values(geometries).forEach((geometry) => geometry.dispose());
       materials.dispose();
       root.clear();
@@ -57,6 +59,7 @@ export function createSubwayTrainModel({
 type TrainGeometries = ReturnType<typeof createSharedTrainGeometries>;
 type TrainMaterials = ReturnType<typeof createSubwayTrainMaterials>;
 
+// 각 차량에서 반복해서 사용하는 차체, 창문, 문 등의 기본 도형을 한 번만 만든다.
 function createSharedTrainGeometries() {
   return {
     body: new BoxGeometry(
@@ -79,6 +82,7 @@ function createSharedTrainGeometries() {
   } satisfies Record<string, BufferGeometry>;
 }
 
+// 열차 한 칸을 만들고, 첫 칸과 마지막 칸에만 앞뒤 운전석과 조명을 붙인다.
 function createTrainCar({
   carIndex,
   carCount,
@@ -119,6 +123,7 @@ function createTrainCar({
   return car;
 }
 
+// 차량 양쪽 옆면에 노선 색상 띠, 창문과 출입문을 붙인다.
 function addSideDetails(
   car: Group,
   geometries: TrainGeometries,
@@ -153,6 +158,7 @@ function addSideDetails(
   }
 }
 
+// 차량 위에는 지붕 장치를, 아래에는 주행 장치 모형을 붙인다.
 function addRoofAndUndercarriage(
   car: Group,
   geometries: TrainGeometries,
@@ -179,6 +185,7 @@ function addRoofAndUndercarriage(
   }
 }
 
+// 열차의 앞뒤 면에 운전석 창문과 전조등 또는 후미등을 붙인다.
 function addCabFace(
   car: Group,
   face: "front" | "rear",

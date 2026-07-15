@@ -15,6 +15,7 @@ export interface SubwayTrainMaterials {
   dispose: () => void;
 }
 
+// 열차의 차체, 창문, 노선 띠와 조명에 사용할 색상과 표면 질감을 만든다.
 export function createSubwayTrainMaterials(
   lineColor: string,
   bodyColor = "#3c4348",
