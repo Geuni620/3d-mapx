@@ -27,6 +27,10 @@ export function SubwayLayerVisibilityEditor({
     dispatchLayerVisibility({ type: "toggle-station-circle-layer" });
   };
 
+  const handleToggleTrainLayer = () => {
+    dispatchLayerVisibility({ type: "toggle-train-layer" });
+  };
+
   return (
     <section className="mt-3 border-t border-white/10 pt-3">
       <div className="mb-2 flex items-center justify-between">
@@ -48,6 +52,11 @@ export function SubwayLayerVisibilityEditor({
           label="역사 Circle"
           isVisible={layerVisibility.isStationCircleLayerVisible}
           onToggle={handleToggleStationCircleLayer}
+        />
+        <SubwayLayerVisibilityButton
+          label="2호선 Train"
+          isVisible={layerVisibility.isTrainLayerVisible}
+          onToggle={handleToggleTrainLayer}
         />
       </div>
     </section>
