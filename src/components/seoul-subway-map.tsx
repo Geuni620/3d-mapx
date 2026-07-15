@@ -17,6 +17,7 @@ import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-i
 import { SeoulSubwayLayers } from "./seoul-subway-layers";
 import { SubwayTrainLayer } from "./subway-train-layer";
 
+// 현재는 선발대로 2호선 본선의 외선·내선 운행 경로만 열차 레이어에 전달한다.
 const LINE_2_MAIN_SERVICE_ROUTES = SEOUL_SUBWAY_OSM_NETWORK.serviceRoutes.filter(
   (serviceRoute) =>
     serviceRoute.lineNumber === 2 &&

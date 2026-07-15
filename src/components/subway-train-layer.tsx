@@ -12,6 +12,7 @@ interface SubwayTrainLayerProps {
   serviceRoutes: SeoulSubwayOsmServiceRoute[];
 }
 
+// 열차 표시 조건에 따라 MapLibre 지도에 Three.js 열차 레이어를 붙이거나 제거한다.
 export function SubwayTrainLayer({
   isActive,
   serviceRoutes,
@@ -31,6 +32,7 @@ export function SubwayTrainLayer({
         map.removeLayer(SUBWAY_TRAIN_LAYER_ID);
       }
     };
+    // 지도 스타일과 역사 라벨이 준비된 뒤 열차 레이어를 라벨 아래에 추가한다.
     const attachLayer = () => {
       if (
         !isActive ||
@@ -70,6 +72,7 @@ export function SubwayTrainLayer({
   return null;
 }
 
+// 사용자가 동작 줄이기를 켰는지 확인해 열차 애니메이션을 멈출지 정한다.
 function usePrefersReducedMotion() {
   const [reducedMotion, setReducedMotion] = useState(false);
 

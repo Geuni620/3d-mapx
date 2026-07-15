@@ -27,6 +27,7 @@ const LINE_2_COLOR = "#00a84d";
 const TRAIN_DISPLAY_ALTITUDE_METERS = 3.5;
 const TRAIN_CROSS_SECTION_SCALE = 1.55;
 const CAR_SPACING_METERS = 21;
+// 실제 운행 자료로 교체하기 전까지 시간대별 속도를 임의 값으로 사용한다.
 const MOCK_SPEED_PROFILE = [
   { startMinute: 0, speedMetersPerSecond: 10 },
   { startMinute: 330, speedMetersPerSecond: 13.5 },
@@ -45,6 +46,7 @@ interface TrainRuntime {
   model: SubwayTrainModel;
 }
 
+// 열차 모형과 이동 시뮬레이션을 MapLibre가 그릴 수 있는 Three.js 레이어로 묶는다.
 export function createSubwayTrainCustomLayer({
   serviceRoutes,
   reducedMotion,
@@ -58,6 +60,7 @@ export function createSubwayTrainCustomLayer({
   let isContextAvailable = true;
   let frozenTimestamp = Date.now();
 
+  // WebGL 작업 공간이 사라지면 그리기를 멈추고, 복구되면 현재 시점부터 다시 그린다.
   const handleContextLost = () => {
     isContextAvailable = false;
   };
@@ -71,6 +74,7 @@ export function createSubwayTrainCustomLayer({
     id: SUBWAY_TRAIN_LAYER_ID,
     type: "custom",
     renderingMode: "3d",
+    // 레이어가 지도에 추가될 때 장면, 조명, 열차 모형과 시뮬레이션을 준비한다.
     onAdd(nextMap, gl) {
       map = nextMap;
       scene = new Scene();
@@ -135,6 +139,7 @@ export function createSubwayTrainCustomLayer({
         .getCanvas()
         .addEventListener("webglcontextrestored", handleContextRestored);
     },
+    // 매 화면마다 계산된 위치를 열차 모형에 적용하고 지도 좌표에 맞춰 그린다.
     render(_gl, { defaultProjectionData }) {
       if (
         !isContextAvailable ||
@@ -188,6 +193,7 @@ export function createSubwayTrainCustomLayer({
         map?.triggerRepaint();
       }
     },
+    // 레이어가 지도에서 제거되면 이벤트와 Three.js GPU 자원을 함께 정리한다.
     onRemove(nextMap) {
       nextMap
         .getCanvas()
