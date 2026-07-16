@@ -11,7 +11,8 @@ export interface SubwayTrainCameraFollower {
   reset: () => void;
 }
 
-// 프레임 간격이 달라도 같은 속도로 목표 좌표에 수렴하도록 지수 감쇠를 적용한다.
+// 열차의 가감속이 아니라, 카메라가 열차 위치를 부드럽게 따라가도록 좌표를 보정한다.
+// 남은 거리 오차가 halfLifeMilliseconds마다 절반으로 줄어 프레임 속도가 달라도 동일하게 수렴한다.
 export function createSubwayTrainCameraFollower(
   halfLifeMilliseconds = DEFAULT_HALF_LIFE_MILLISECONDS,
 ): SubwayTrainCameraFollower {
@@ -33,6 +34,7 @@ export function createSubwayTrainCameraFollower(
         0,
         timestampMilliseconds - previousTimestampMilliseconds,
       );
+      // 지난 프레임 이후 흐른 시간만큼 이번 프레임에서 이동할 비율을 구한다.
       const alpha =
         halfLifeMilliseconds <= 0
           ? 1

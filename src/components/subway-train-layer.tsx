@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import type { SeoulSubwayOsmServiceRoute } from "../features/subway/osm-subway-network";
 import {
@@ -22,11 +22,8 @@ export function SubwayTrainLayer({
 }: SubwayTrainLayerProps) {
   const { current: mapReference } = useMap();
   const reducedMotion = usePrefersReducedMotion();
-  const isFollowingReference = useRef(isFollowing);
-
-  useEffect(() => {
-    isFollowingReference.current = isFollowing;
-  }, [isFollowing]);
+  // 열차 레이어를 다시 만들지 않고도 렌더 콜백이 최신 추적 상태를 읽는다.
+  const shouldFollowTrain = useEffectEvent(() => isFollowing);
 
   useEffect(() => {
     const map = mapReference?.getMap();
@@ -60,7 +57,7 @@ export function SubwayTrainLayer({
             serviceRoutes,
             reducedMotion,
             onLeadTrainPose({ coordinate }) {
-              if (!isFollowingReference.current) {
+              if (!shouldFollowTrain()) {
                 cameraFollower.reset();
                 lastAppliedCoordinate = undefined;
                 return false;
