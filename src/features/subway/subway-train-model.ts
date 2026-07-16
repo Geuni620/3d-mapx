@@ -6,8 +6,8 @@ import {
   type BufferGeometry,
 } from "three";
 import { createSubwayTrainMaterials } from "./subway-train-materials";
+import { SUBWAY_TRAIN_CAR_LENGTH_METERS } from "./subway-train-dimensions";
 
-const CAR_LENGTH_METERS = 19.5;
 const CAR_WIDTH_METERS = 3.15;
 const CAR_BODY_HEIGHT_METERS = 3.4;
 
@@ -64,17 +64,25 @@ function createSharedTrainGeometries() {
   return {
     body: new BoxGeometry(
       CAR_WIDTH_METERS,
-      CAR_LENGTH_METERS,
+      SUBWAY_TRAIN_CAR_LENGTH_METERS,
       CAR_BODY_HEIGHT_METERS,
       1,
       1,
       1,
     ),
     roof: new BoxGeometry(CAR_WIDTH_METERS * 0.88, 5.6, 0.28),
-    roofLine: new BoxGeometry(0.68, CAR_LENGTH_METERS * 0.88, 0.1),
+    roofLine: new BoxGeometry(
+      0.68,
+      SUBWAY_TRAIN_CAR_LENGTH_METERS * 0.88,
+      0.1,
+    ),
     window: new BoxGeometry(0.08, 1.85, 1.05),
     door: new BoxGeometry(0.09, 1.7, 2.28),
-    line: new BoxGeometry(0.1, CAR_LENGTH_METERS * 0.93, 0.24),
+    line: new BoxGeometry(
+      0.1,
+      SUBWAY_TRAIN_CAR_LENGTH_METERS * 0.93,
+      0.24,
+    ),
     bogie: new BoxGeometry(CAR_WIDTH_METERS * 0.72, 2.2, 0.48),
     coupler: new BoxGeometry(0.7, 0.65, 0.45),
     cabWindow: new BoxGeometry(CAR_WIDTH_METERS * 0.62, 0.09, 1.08),
@@ -116,7 +124,11 @@ function createTrainCar({
   if (carIndex > 0) {
     const coupler = new Mesh(geometries.coupler, materials.undercarriage);
 
-    coupler.position.set(0, CAR_LENGTH_METERS / 2 + 0.3, 1.05);
+    coupler.position.set(
+      0,
+      SUBWAY_TRAIN_CAR_LENGTH_METERS / 2 + 0.3,
+      1.05,
+    );
     car.add(coupler);
   }
 
@@ -196,7 +208,11 @@ function addCabFace(
   const cabWindow = new Mesh(geometries.cabWindow, materials.window);
   const lightGroup = new Group();
 
-  cabWindow.position.set(0, direction * (CAR_LENGTH_METERS / 2 + 0.05), 2.72);
+  cabWindow.position.set(
+    0,
+    direction * (SUBWAY_TRAIN_CAR_LENGTH_METERS / 2 + 0.05),
+    2.72,
+  );
   car.add(cabWindow);
 
   lightGroup.name = face === "front" ? "train-headlights" : "train-tail-lights";
@@ -208,7 +224,11 @@ function addCabFace(
     );
 
     light.rotation.x = Math.PI / 2;
-    light.position.set(x, direction * (CAR_LENGTH_METERS / 2 + 0.12), 1.65);
+    light.position.set(
+      x,
+      direction * (SUBWAY_TRAIN_CAR_LENGTH_METERS / 2 + 0.12),
+      1.65,
+    );
     lightGroup.add(light);
   }
 

@@ -22,11 +22,11 @@ import {
   createSubwayTrainModel,
   type SubwayTrainModel,
 } from "./subway-train-model";
+import { SUBWAY_TRAIN_CAR_SPACING_METERS } from "./subway-train-dimensions";
 
 const LINE_2_COLOR = "#00a84d";
 const TRAIN_DISPLAY_ALTITUDE_METERS = 0;
 const TRAIN_CROSS_SECTION_SCALE = 1.55;
-const CAR_SPACING_METERS = 21;
 // 실제 운행 자료로 교체하기 전까지 시간대별 속도를 임의 값으로 사용한다.
 const MOCK_SPEED_PROFILE = [
   { startMinute: 0, speedMetersPerSecond: 10 },
@@ -121,7 +121,7 @@ export function createSubwayTrainCustomLayer({
             (stop) => stop.distanceMeters,
           ),
           carCount: 3,
-          carSpacingMeters: CAR_SPACING_METERS,
+          carSpacingMeters: SUBWAY_TRAIN_CAR_SPACING_METERS,
           dwellSeconds: 20,
           phaseOffsetSeconds: routeIndex * 1_370,
           speedProfile: MOCK_SPEED_PROFILE,
