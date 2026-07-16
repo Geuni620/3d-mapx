@@ -24,7 +24,7 @@ import {
 } from "./subway-train-model";
 
 const LINE_2_COLOR = "#00a84d";
-const TRAIN_DISPLAY_ALTITUDE_METERS = 3.5;
+const TRAIN_DISPLAY_ALTITUDE_METERS = 0;
 const TRAIN_CROSS_SECTION_SCALE = 1.55;
 const CAR_SPACING_METERS = 21;
 // 실제 운행 자료로 교체하기 전까지 시간대별 속도를 임의 값으로 사용한다.
@@ -173,7 +173,7 @@ export function createSubwayTrainCustomLayer({
           car.scale.set(
             meterScale * TRAIN_CROSS_SECTION_SCALE,
             meterScale,
-            meterScale * TRAIN_CROSS_SECTION_SCALE,
+            meterScale,
           );
         });
       });
