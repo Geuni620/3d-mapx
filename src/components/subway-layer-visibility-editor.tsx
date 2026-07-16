@@ -9,6 +9,7 @@ import { cn } from "../lib/cn";
 interface SubwayLayerVisibilityEditorProps {
   layerVisibility: SubwayLayerVisibility;
   dispatchLayerVisibility: Dispatch<SubwayLayerVisibilityAction>;
+  onToggleTrainLayer: () => void;
   visualLevel: SubwayVisualLevel;
   zoom: number;
 }
@@ -16,6 +17,7 @@ interface SubwayLayerVisibilityEditorProps {
 export function SubwayLayerVisibilityEditor({
   layerVisibility,
   dispatchLayerVisibility,
+  onToggleTrainLayer,
   visualLevel,
   zoom,
 }: SubwayLayerVisibilityEditorProps) {
@@ -25,10 +27,6 @@ export function SubwayLayerVisibilityEditor({
 
   const handleToggleStationCircleLayer = () => {
     dispatchLayerVisibility({ type: "toggle-station-circle-layer" });
-  };
-
-  const handleToggleTrainLayer = () => {
-    dispatchLayerVisibility({ type: "toggle-train-layer" });
   };
 
   return (
@@ -56,7 +54,7 @@ export function SubwayLayerVisibilityEditor({
         <SubwayLayerVisibilityButton
           label="2호선 Train"
           isVisible={layerVisibility.isTrainLayerVisible}
-          onToggle={handleToggleTrainLayer}
+          onToggle={onToggleTrainLayer}
         />
       </div>
     </section>
