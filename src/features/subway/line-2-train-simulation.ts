@@ -1,5 +1,9 @@
 import type { SubwayCoordinate } from "./osm-subway-network";
-import type { SubwayRouteSampler } from "./subway-route-sampler";
+import {
+  sampleSubwayRouteChordPose,
+  type SubwayRouteSampler,
+} from "./subway-route-sampler";
+import { SUBWAY_TRAIN_BOGIE_OFFSET_METERS } from "./subway-train-dimensions";
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
 const KOREAN_TIME_FORMATTER = new Intl.DateTimeFormat("en-CA", {
@@ -87,7 +91,11 @@ export function createSubwayTrainSimulation(
             frontDistanceMeters - carIndex * options.carSpacingMeters,
             options.sampler.totalDistanceMeters,
           );
-          const pose = options.sampler.sample(distanceMeters);
+          const pose = sampleSubwayRouteChordPose(
+            options.sampler,
+            distanceMeters,
+            SUBWAY_TRAIN_BOGIE_OFFSET_METERS,
+          );
 
           return {
             carIndex,

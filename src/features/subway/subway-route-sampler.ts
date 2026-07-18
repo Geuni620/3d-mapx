@@ -27,6 +27,29 @@ export interface SubwayRouteSampler {
   project: (coordinate: SubwayCoordinate) => SubwayRouteProjection;
 }
 
+// 차량의 앞뒤 대차 지점을 이어 polyline 모서리에서도 연속적인 진행 방향을 구한다.
+export function sampleSubwayRouteChordPose(
+  sampler: SubwayRouteSampler,
+  centerDistanceMeters: number,
+  bogieOffsetMeters: number,
+): SubwayRoutePose {
+  const centerPose = sampler.sample(centerDistanceMeters);
+  const rearPose = sampler.sample(centerDistanceMeters - bogieOffsetMeters);
+  const frontPose = sampler.sample(centerDistanceMeters + bogieOffsetMeters);
+
+  if (coordinatesEqual(rearPose.coordinate, frontPose.coordinate)) {
+    return centerPose;
+  }
+
+  return {
+    coordinate: centerPose.coordinate,
+    headingRadians: calculateHeadingRadians(
+      rearPose.coordinate,
+      frontPose.coordinate,
+    ),
+  };
+}
+
 export function createSubwayRouteSampler(
   path: ReadonlyArray<readonly [number, number]>,
 ): SubwayRouteSampler | undefined {
