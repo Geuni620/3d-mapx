@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createSubwayRouteSampler } from "./subway-route-sampler";
+import {
+  createSubwayRouteSampler,
+  sampleSubwayRouteChordPose,
+} from "./subway-route-sampler";
 
 const TEST_LOOP = [
   [126.97, 37.56],
@@ -48,4 +51,30 @@ describe("운행 경로 위치 계산", () => {
     expect(projection.distanceMeters).toBeGreaterThan(30);
     expect(projection.offsetMeters).toBeLessThan(10);
   });
+
+  it("차량이 경로 모서리를 지날 때 앞뒤 대차 위치로 계산한 방향은 연속적으로 변한다", () => {
+    const sampler = createSubwayRouteSampler(TEST_LOOP)!;
+    const cornerDistanceMeters = sampler.project(TEST_LOOP[1]).distanceMeters;
+    const immediatelyBefore = sampleSubwayRouteChordPose(
+      sampler,
+      cornerDistanceMeters - 0.1,
+      4.5,
+    );
+    const immediatelyAfter = sampleSubwayRouteChordPose(
+      sampler,
+      cornerDistanceMeters + 0.1,
+      4.5,
+    );
+
+    expect(
+      getSmallestAngleDifference(
+        immediatelyBefore.headingRadians,
+        immediatelyAfter.headingRadians,
+      ),
+    ).toBeLessThan(0.01);
+  });
 });
+
+function getSmallestAngleDifference(first: number, second: number) {
+  return Math.abs(Math.atan2(Math.sin(first - second), Math.cos(first - second)));
+}
