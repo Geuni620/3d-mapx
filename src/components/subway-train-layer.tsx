@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import type { SeoulSubwayOsmServiceRoute } from "../features/subway/osm-subway-network";
 import {
@@ -6,19 +6,24 @@ import {
   SUBWAY_TRAIN_LAYER_ID,
 } from "../features/subway/subway-layer-ids";
 import { createSubwayTrainCustomLayer } from "../features/subway/subway-train-custom-layer";
+import { createSubwayTrainCameraFollower } from "../features/subway/subway-train-camera-follow";
 
 interface SubwayTrainLayerProps {
   isActive: boolean;
+  isFollowing: boolean;
   serviceRoutes: SeoulSubwayOsmServiceRoute[];
 }
 
 // 열차 표시 조건에 따라 MapLibre 지도에 Three.js 열차 레이어를 붙이거나 제거한다.
 export function SubwayTrainLayer({
   isActive,
+  isFollowing,
   serviceRoutes,
 }: SubwayTrainLayerProps) {
   const { current: mapReference } = useMap();
   const reducedMotion = usePrefersReducedMotion();
+  // 열차 레이어를 다시 만들지 않고도 렌더 콜백이 최신 추적 상태를 읽는다.
+  const shouldFollowTrain = useEffectEvent(() => isFollowing);
 
   useEffect(() => {
     const map = mapReference?.getMap();
@@ -26,6 +31,9 @@ export function SubwayTrainLayer({
     if (map === undefined) {
       return;
     }
+
+    const cameraFollower = createSubwayTrainCameraFollower();
+    let lastAppliedCoordinate: readonly [number, number] | undefined;
 
     const detachLayer = () => {
       if (map.getLayer(SUBWAY_TRAIN_LAYER_ID) !== undefined) {
@@ -45,7 +53,36 @@ export function SubwayTrainLayer({
 
       try {
         map.addLayer(
-          createSubwayTrainCustomLayer({ serviceRoutes, reducedMotion }),
+          createSubwayTrainCustomLayer({
+            serviceRoutes,
+            reducedMotion,
+            onLeadTrainPose({ coordinate }) {
+              if (!shouldFollowTrain()) {
+                cameraFollower.reset();
+                lastAppliedCoordinate = undefined;
+                return false;
+              }
+
+              const now = performance.now();
+              const nextCoordinate = cameraFollower.next(coordinate, now);
+
+              if (
+                lastAppliedCoordinate?.[0] === nextCoordinate[0] &&
+                lastAppliedCoordinate[1] === nextCoordinate[1]
+              ) {
+                return false;
+              }
+
+              map.jumpTo({
+                center: {
+                  lng: nextCoordinate[0],
+                  lat: nextCoordinate[1],
+                },
+              });
+              lastAppliedCoordinate = nextCoordinate;
+              return true;
+            },
+          }),
           SUBWAY_STATION_LABEL_LAYER_ID,
         );
       } catch (error) {

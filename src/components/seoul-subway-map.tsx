@@ -1,7 +1,11 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { LayersList } from "@deck.gl/core";
 import { MapboxOverlay } from "@deck.gl/mapbox";
-import Map, { useControl, useMap } from "react-map-gl/maplibre";
+import Map, {
+  useControl,
+  useMap,
+  type MapRef,
+} from "react-map-gl/maplibre";
 import { INITIAL_VIEW_STATE } from "../app/map-config";
 import { SEOUL_TRANSIT_DARK_STYLE } from "../app/map-style";
 import { SEOUL_SUBWAY_OSM_NETWORK } from "../features/subway/osm-subway-network";
@@ -30,7 +34,9 @@ interface SeoulSubwayMapProps {
   layerVisibility: SubwayLayerVisibility;
   visualLevel: SubwayVisualLevel;
   zoom: number;
+  isFollowingLine2Train: boolean;
   onZoomChange: (zoom: number) => void;
+  onStopFollowingLine2Train: () => void;
 }
 
 export function SeoulSubwayMap({
@@ -38,8 +44,11 @@ export function SeoulSubwayMap({
   layerVisibility,
   visualLevel,
   zoom,
+  isFollowingLine2Train,
   onZoomChange,
+  onStopFollowingLine2Train,
 }: SeoulSubwayMapProps) {
+  const mapReference = useRef<MapRef>(null);
   const visibleStations = useMemo(
     () => createVisibleSubwayStations(selectedLineNumbers),
     [selectedLineNumbers],
@@ -60,8 +69,27 @@ export function SeoulSubwayMap({
     [displayStations, layerVisibility, selectedLineNumbers, visualLevel],
   );
 
+  useEffect(() => {
+    if (!isFollowingLine2Train) {
+      return;
+    }
+
+    const initialCoordinate = LINE_2_MAIN_SERVICE_ROUTES[0]?.path[0];
+
+    if (initialCoordinate === undefined) {
+      return;
+    }
+
+    mapReference.current?.jumpTo({
+      center: { lng: initialCoordinate[0], lat: initialCoordinate[1] },
+      zoom: 16,
+      pitch: 60,
+    });
+  }, [isFollowingLine2Train]);
+
   return (
     <Map
+      ref={mapReference}
       initialViewState={INITIAL_VIEW_STATE}
       mapStyle={SEOUL_TRANSIT_DARK_STYLE}
       style={{ width: "100%", height: "100%" }}
@@ -70,6 +98,16 @@ export function SeoulSubwayMap({
 
         if (zoom !== nextZoom) {
           onZoomChange(nextZoom);
+        }
+      }}
+      onDragStart={() => {
+        if (isFollowingLine2Train) {
+          onStopFollowingLine2Train();
+        }
+      }}
+      onZoomStart={(event) => {
+        if (isFollowingLine2Train && event.originalEvent !== undefined) {
+          onStopFollowingLine2Train();
         }
       }}
     >
@@ -81,6 +119,7 @@ export function SeoulSubwayMap({
           layerVisibility.isTrainLayerVisible &&
           visualLevel.id === "inspection"
         }
+        isFollowing={isFollowingLine2Train}
         serviceRoutes={LINE_2_MAIN_SERVICE_ROUTES}
       />
     </Map>

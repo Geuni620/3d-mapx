@@ -7,6 +7,7 @@ import {
   createInitialSelectedLineNumberSet,
   getSelectedLineNumbers,
   selectedLineNumberSetReducer,
+  type SubwayLineSelectionAction,
 } from "./subway-line-selection";
 import {
   createInitialSubwayLayerVisibility,
@@ -25,12 +26,47 @@ export function SeoulSubwayExplorer() {
     createInitialSubwayLayerVisibility,
   );
   const [zoom, setZoom] = useState(INITIAL_VIEW_STATE.zoom);
+  const [isFollowingLine2Train, setIsFollowingLine2Train] = useState(false);
 
   const selectedLineNumbers = useMemo(
     () => getSelectedLineNumbers(selectedLineNumberSet),
     [selectedLineNumberSet],
   );
   const visualLevel = createSubwayVisualLevel(zoom);
+
+  const handleSelectedLineNumberSetAction = (
+    action: SubwayLineSelectionAction,
+  ) => {
+    const nextSelectedLineNumberSet = selectedLineNumberSetReducer(
+      selectedLineNumberSet,
+      action,
+    );
+
+    dispatchSelectedLineNumberSet(action);
+
+    if (!nextSelectedLineNumberSet.has(2)) {
+      setIsFollowingLine2Train(false);
+    }
+  };
+
+  const handleToggleTrainLayer = () => {
+    const willShowTrainLayer = !layerVisibility.isTrainLayerVisible;
+
+    dispatchLayerVisibility({ type: "toggle-train-layer" });
+
+    if (!willShowTrainLayer) {
+      setIsFollowingLine2Train(false);
+      return;
+    }
+
+    dispatchSelectedLineNumberSet({ type: "select-only", lineNumber: 2 });
+
+    if (!layerVisibility.isRouteLayerVisible) {
+      dispatchLayerVisibility({ type: "toggle-route-layer" });
+    }
+
+    setIsFollowingLine2Train(true);
+  };
 
   return (
     <div className="relative h-screen w-screen">
@@ -39,16 +75,19 @@ export function SeoulSubwayExplorer() {
         layerVisibility={layerVisibility}
         visualLevel={visualLevel}
         zoom={zoom}
+        isFollowingLine2Train={isFollowingLine2Train}
         onZoomChange={setZoom}
+        onStopFollowingLine2Train={() => setIsFollowingLine2Train(false)}
       />
       <SubwayLineInspector
         className="absolute left-4 top-4 z-10"
         selectedLineNumberSet={selectedLineNumberSet}
-        dispatchSelectedLineNumberSet={dispatchSelectedLineNumberSet}
+        dispatchSelectedLineNumberSet={handleSelectedLineNumberSetAction}
         layerVisibility={layerVisibility}
         dispatchLayerVisibility={dispatchLayerVisibility}
         visualLevel={visualLevel}
         zoom={zoom}
+        onToggleTrainLayer={handleToggleTrainLayer}
       />
     </div>
   );

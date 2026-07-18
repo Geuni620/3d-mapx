@@ -16,6 +16,7 @@ import { createSubwayRouteSampler } from "./subway-route-sampler";
 import { SUBWAY_TRAIN_LAYER_ID } from "./subway-layer-ids";
 import {
   createSubwayTrainSimulation,
+  type SubwayTrainCarPose,
   type SubwayTrainSimulation,
 } from "./line-2-train-simulation";
 import {
@@ -39,6 +40,7 @@ const MOCK_SPEED_PROFILE = [
 interface SubwayTrainCustomLayerOptions {
   serviceRoutes: SeoulSubwayOsmServiceRoute[];
   reducedMotion: boolean;
+  onLeadTrainPose?: (pose: SubwayTrainCarPose) => boolean;
 }
 
 interface TrainRuntime {
@@ -50,6 +52,7 @@ interface TrainRuntime {
 export function createSubwayTrainCustomLayer({
   serviceRoutes,
   reducedMotion,
+  onLeadTrainPose,
 }: SubwayTrainCustomLayerOptions): CustomLayerInterface {
   let map: MapLibreMap | undefined;
   let renderer: WebGLRenderer | undefined;
@@ -152,9 +155,14 @@ export function createSubwayTrainCustomLayer({
       }
 
       const timestamp = reducedMotion ? frozenTimestamp : Date.now();
+      let leadTrainPose: SubwayTrainCarPose | undefined;
 
-      trainRuntimes.forEach(({ simulation, model }) => {
+      trainRuntimes.forEach(({ simulation, model }, runtimeIndex) => {
         const state = simulation.getState(timestamp);
+
+        if (runtimeIndex === 0 && state.carPoses[0] !== undefined) {
+          leadTrainPose = state.carPoses[0];
+        }
 
         state.carPoses.forEach((pose, carIndex) => {
           const coordinate = MercatorCoordinate.fromLngLat(
@@ -188,8 +196,10 @@ export function createSubwayTrainCustomLayer({
       renderer.clearDepth();
       renderer.render(scene, camera);
       renderer.resetState();
+      const didMoveCamera =
+        leadTrainPose !== undefined && onLeadTrainPose?.(leadTrainPose) === true;
 
-      if (!reducedMotion) {
+      if (!reducedMotion && !didMoveCamera) {
         map?.triggerRepaint();
       }
     },
