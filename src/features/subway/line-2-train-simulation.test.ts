@@ -42,13 +42,15 @@ describe("2호선 열차 운행 시뮬레이션", () => {
     expect(dwelling.phase).toBe("dwelling");
     expect(dwelling.speedMetersPerSecond).toBe(0);
     expect(moving.phase).toBe("moving");
-    expect(moving.speedMetersPerSecond).toBe(10);
+    expect(moving.motion).toBe("accelerating");
+    expect(moving.speedMetersPerSecond).toBeGreaterThan(0);
+    expect(moving.speedMetersPerSecond).toBeLessThan(10);
     expect(moving.frontDistanceMeters).toBeGreaterThan(0);
   });
 
   it("여러 칸으로 구성된 열차가 이동할 때 운행 상태를 조회하면 차량마다 서로 다른 위치와 방향을 반환한다", () => {
     const simulation = createTestSimulation();
-    const state = simulation.getState(KOREAN_MIDNIGHT + 15_000);
+    const state = simulation.getState(KOREAN_MIDNIGHT + 19_000);
 
     expect(state.carPoses).toHaveLength(3);
     expect(new Set(state.carPoses.map((pose) => pose.distanceMeters)).size).toBe(
@@ -59,16 +61,50 @@ describe("2호선 열차 운행 시뮬레이션", () => {
     );
   });
 
+  it("주행 중에는 초 경계 안팎에서 경과한 밀리초만큼 전진하고 정차 중에는 제자리에 머문다", () => {
+    const simulation = createTestSimulation();
+    const distance = (ms: number) => simulation.getState(KOREAN_MIDNIGHT + ms).frontDistanceMeters;
+    expect(distance(1_999)).toBe(distance(1_001));
+    expect(distance(2_016)).toBeGreaterThan(distance(2_000));
+    // 출발 첫 1초는 jerk가 일정해 속도는 t²/2, 이동거리는 t³/6에 비례한다.
+    const advance = distance(3_008) - distance(2_992);
+    expect(advance).toBeCloseTo(0.65 * (1.008 ** 3 - 0.992 ** 3) / 6, 8);
+  });
+
+  it("감속 구간을 지나면 역에 정지하고, 다음 출발 전까지 같은 거리와 영속도를 유지한다", () => {
+    const simulation = createTestSimulation();
+    let braking = false;
+    for (let ms = 2_001; ms < 90_000; ms += 16) {
+      const state = simulation.getMotion(KOREAN_MIDNIGHT + ms);
+      if (state.motion === "braking") {
+        const next = simulation.getMotion(KOREAN_MIDNIGHT + ms + 1);
+        expect(next.speedMetersPerSecond).toBeLessThanOrEqual(state.speedMetersPerSecond + 1e-9);
+        braking = true;
+      }
+      if (braking && state.phase === "dwelling") {
+        const later = simulation.getMotion(KOREAN_MIDNIGHT + ms + 1_000);
+        expect(state.speedMetersPerSecond).toBe(0);
+        expect(later.frontDistanceMeters).toBe(state.frontDistanceMeters);
+        expect(simulation.getLeadPose(KOREAN_MIDNIGHT + ms).lead).toEqual(simulation.getState(KOREAN_MIDNIGHT + ms).carPoses[0]);
+        return;
+      }
+    }
+    throw new Error("감속 후 첫 정차 구간을 찾지 못했습니다.");
+  });
+
   it("한국 시간대별 속도가 설정되어 있을 때 운행 상태를 조회하면 해당 시간의 속도를 적용한다", () => {
     const simulation = createTestSimulation();
 
-    const normal = simulation.getState(KOREAN_MIDNIGHT + 3_000);
-    const slower = simulation.getState(
-      KOREAN_MIDNIGHT + 6 * 60 * 60 * 1000 + 3_000,
-    );
+    // 당장 속도를 바꾸지 않고 다음 역에서 출발할 때 해당 시간대의 순항 제한을 선택한다.
+    function peakSpeed(start: number) {
+      const samples = Array.from({ length: 90 }, (_, i) =>
+        simulation.getMotion(KOREAN_MIDNIGHT + start + i * 1_000).speedMetersPerSecond,
+      );
+      return Math.max(...samples);
+    }
+    expect(peakSpeed(0)).toBeCloseTo(10);
+    expect(peakSpeed(6 * 3_600_000 + 120_000)).toBeCloseTo(5);
 
-    expect(normal.speedMetersPerSecond).toBe(10);
-    expect(slower.speedMetersPerSecond).toBe(5);
   });
 });
 
