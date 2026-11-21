@@ -1,4 +1,4 @@
-import type { Dispatch } from "react";
+import { useState, type Dispatch } from "react";
 import { cva } from "class-variance-authority";
 import { SubwayLayerVisibilityEditor } from "./subway-layer-visibility-editor";
 import {
@@ -37,6 +37,7 @@ export function SubwayLineInspector({
   zoom,
   className,
 }: SubwayLineInspectorProps) {
+  const [mobileOpen, setMobileOpen] = useState(false);
   const handleToggleLine = (lineNumber: SubwayLineNumber) => {
     dispatchSelectedLineNumberSet({ type: "toggle", lineNumber });
   };
@@ -54,6 +55,12 @@ export function SubwayLineInspector({
       aria-label="서울 지하철 노선 인스펙터"
       className={cn(subwayLineInspector(), className)}
     >
+      <button type="button" className="flex w-full items-center justify-between text-sm md:hidden"
+        aria-expanded={mobileOpen} aria-controls="subway-lines-panel" onClick={() => setMobileOpen(!mobileOpen)}>
+        <span>서울 지하철 · {selectedLineNumberSet.size}/{SUBWAY_LINES.length}</span>
+        <span>{mobileOpen ? "접기" : "필터"}</span>
+      </button>
+      <div id="subway-lines-panel" className={cn("md:block", mobileOpen ? "mt-3 md:mt-0" : "hidden")}>
       <SubwayLineInspectorHeader
         selectedLineCount={selectedLineNumberSet.size}
       />
@@ -71,6 +78,8 @@ export function SubwayLineInspector({
         visualLevel={visualLevel}
         zoom={zoom}
       />
+      <p className="mt-3 text-xs leading-relaxed text-zinc-300">내선 청록 · 외선 연두<br/>Ⅱ 정차 · ▥ 차량기지</p>
+      </div>
     </aside>
   );
 }

@@ -6,6 +6,7 @@ import { INITIAL_VIEW_STATE } from "../app/map-config";
 import { SEOUL_TRANSIT_DARK_STYLE } from "../app/map-style";
 import { SEOUL_SUBWAY_OSM_NETWORK } from "../features/subway/osm-subway-network";
 import {
+  createSubwayVisualLevel,
   createSubwayDeckLayers,
   createSubwayDisplayStations,
   type SubwayVisualLevel,
@@ -15,15 +16,8 @@ import type { SubwayLineNumber } from "../features/subway/subway-constants";
 import type { SubwayLayerVisibility } from "../features/subway/subway-layer-visibility";
 import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-ids";
 import { SeoulSubwayLayers } from "./seoul-subway-layers";
-import { SubwayTrainLayer } from "./subway-train-layer";
-
-// 현재는 선발대로 2호선 본선의 외선·내선 운행 경로만 열차 레이어에 전달한다.
-const LINE_2_MAIN_SERVICE_ROUTES = SEOUL_SUBWAY_OSM_NETWORK.serviceRoutes.filter(
-  (serviceRoute) =>
-    serviceRoute.lineNumber === 2 &&
-    (serviceRoute.direction === "outer-loop" ||
-      serviceRoute.direction === "inner-loop"),
-);
+import { DETAIL_START, DETAIL_END } from "../features/subway/line-2-main-simulation";
+import { Line2Service } from "./line-2-service";
 
 interface SeoulSubwayMapProps {
   selectedLineNumbers: SubwayLineNumber[];
@@ -68,21 +62,18 @@ export function SeoulSubwayMap({
       onMove={(event) => {
         const nextZoom = Number(event.viewState.zoom.toFixed(2));
 
-        if (zoom !== nextZoom) {
+        const debug = import.meta.env.DEV && new URLSearchParams(location.search).get("debug")==="1";
+        const crossed = [13, DETAIL_START, DETAIL_END].some(z=>(zoom<z)!==(nextZoom<z));
+        if (zoom !== nextZoom && (debug || crossed || createSubwayVisualLevel(nextZoom).id !== visualLevel.id)) {
           onZoomChange(nextZoom);
         }
       }}
     >
       <SeoulSubwayLayers stations={displayStations} />
       <DeckRouteOverlay layers={subwayDeckLayers} />
-      <SubwayTrainLayer
-        isActive={
-          selectedLineNumbers.includes(2) &&
-          layerVisibility.isTrainLayerVisible &&
-          visualLevel.id === "inspection"
-        }
-        serviceRoutes={LINE_2_MAIN_SERVICE_ROUTES}
-      />
+      {selectedLineNumbers.includes(2) && layerVisibility.isTrainLayerVisible && (
+        <Line2Service zoom={zoom} />
+      )}
     </Map>
   );
 }
@@ -104,11 +95,13 @@ function DeckRouteOverlay({ layers }: DeckRouteOverlayProps) {
       return;
     }
 
+    let applied = false;
     const updateRouteLayers = () => {
-      if (map.getLayer(SUBWAY_STATION_LABEL_LAYER_ID) === undefined) {
+      if (applied || map.getLayer(SUBWAY_STATION_LABEL_LAYER_ID) === undefined) {
         return;
       }
 
+      applied = true;
       overlay.setProps({ layers });
     };
 

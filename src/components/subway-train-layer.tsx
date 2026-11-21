@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useMap } from "react-map-gl/maplibre";
-import type { SeoulSubwayOsmServiceRoute } from "../features/subway/osm-subway-network";
+import type { ScheduledTrain } from "../features/subway/line-2-timetable";
 import {
   SUBWAY_STATION_LABEL_LAYER_ID,
   SUBWAY_TRAIN_LAYER_ID,
@@ -9,17 +9,18 @@ import { createSubwayTrainCustomLayer } from "../features/subway/subway-train-cu
 
 interface SubwayTrainLayerProps {
   isActive: boolean;
-  serviceRoutes: SeoulSubwayOsmServiceRoute[];
+  trains: readonly ScheduledTrain[];
+  frozenTimestamp: number | null;
 }
 
 // 열차 표시 조건에 따라 MapLibre 지도에 Three.js 열차 레이어를 붙이거나 제거한다.
-export function SubwayTrainLayer({
-  isActive,
-  serviceRoutes,
-}: SubwayTrainLayerProps) {
+export function SubwayTrainLayer({ isActive, trains, frozenTimestamp }: SubwayTrainLayerProps) {
   const { current: mapReference } = useMap();
-  const reducedMotion = usePrefersReducedMotion();
-
+  const current = useRef(trains);
+  useEffect(() => {
+    current.current = trains;
+    if (isActive) mapReference?.getMap().triggerRepaint();
+  }, [trains, isActive, mapReference]);
   useEffect(() => {
     const map = mapReference?.getMap();
 
@@ -36,7 +37,6 @@ export function SubwayTrainLayer({
     const attachLayer = () => {
       if (
         !isActive ||
-        serviceRoutes.length === 0 ||
         map.getLayer(SUBWAY_TRAIN_LAYER_ID) !== undefined ||
         map.getLayer(SUBWAY_STATION_LABEL_LAYER_ID) === undefined
       ) {
@@ -45,7 +45,7 @@ export function SubwayTrainLayer({
 
       try {
         map.addLayer(
-          createSubwayTrainCustomLayer({ serviceRoutes, reducedMotion }),
+          createSubwayTrainCustomLayer({ getTrains: () => current.current, frozenTimestamp }),
           SUBWAY_STATION_LABEL_LAYER_ID,
         );
       } catch (error) {
@@ -67,24 +67,7 @@ export function SubwayTrainLayer({
       map.off("idle", attachLayer);
       detachLayer();
     };
-  }, [isActive, mapReference, reducedMotion, serviceRoutes]);
+  }, [isActive, mapReference, frozenTimestamp]);
 
   return null;
-}
-
-// 사용자가 동작 줄이기를 켰는지 확인해 열차 애니메이션을 멈출지 정한다.
-function usePrefersReducedMotion() {
-  const [reducedMotion, setReducedMotion] = useState(false);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const updateReducedMotion = () => setReducedMotion(mediaQuery.matches);
-
-    updateReducedMotion();
-    mediaQuery.addEventListener("change", updateReducedMotion);
-
-    return () => mediaQuery.removeEventListener("change", updateReducedMotion);
-  }, []);
-
-  return reducedMotion;
 }
