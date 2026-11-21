@@ -55,26 +55,22 @@ describe("운행 경로 위치 계산", () => {
   it("차량이 경로 모서리를 지날 때 앞뒤 대차 위치로 계산한 방향은 연속적으로 변한다", () => {
     const sampler = createSubwayRouteSampler(TEST_LOOP)!;
     const cornerDistanceMeters = sampler.project(TEST_LOOP[1]).distanceMeters;
-    const immediatelyBefore = sampleSubwayRouteChordPose(
-      sampler,
-      cornerDistanceMeters - 0.1,
-      4.5,
-    );
-    const immediatelyAfter = sampleSubwayRouteChordPose(
-      sampler,
-      cornerDistanceMeters + 0.1,
-      4.5,
-    );
+    const bogieOffset = 4.5;
+    const headingAt = (offset: number) =>
+      sampleSubwayRouteChordPose(sampler, cornerDistanceMeters + offset, bogieOffset).headingRadians;
+    const center = headingAt(0);
+    expect(center).toBeCloseTo(Math.PI / 4, 6);
 
-    expect(
-      getSmallestAngleDifference(
-        immediatelyBefore.headingRadians,
-        immediatelyAfter.headingRadians,
-      ),
-    ).toBeLessThan(0.01);
+    // 직각 모서리 양쪽 ε에서 현의 방향 차는 2·atan(ε / 대차 오프셋)이다.
+    let previousGap = Infinity;
+    for (const epsilon of [0.1, 0.01, 0.001]) {
+      const before = headingAt(-epsilon);
+      const after = headingAt(epsilon);
+      const halfGap = Math.atan(epsilon / bogieOffset);
+      expect(before - center).toBeCloseTo(halfGap, 6);
+      expect(center - after).toBeCloseTo(halfGap, 6);
+      expect(before - after).toBeLessThan(previousGap);
+      previousGap = before - after;
+    }
   });
 });
-
-function getSmallestAngleDifference(first: number, second: number) {
-  return Math.abs(Math.atan2(Math.sin(first - second), Math.cos(first - second)));
-}

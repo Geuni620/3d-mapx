@@ -1,75 +1,79 @@
 import {
+  AdditiveBlending,
   Color,
+  DoubleSide,
+  MeshBasicMaterial,
   MeshStandardMaterial,
-  type Material,
+  SRGBColorSpace,
+  TextureLoader,
 } from "three";
+import liveryUrl from "./assets/line-2-livery.webp";
+import lightsUrl from "./assets/line-2-lights.webp";
 
-export interface SubwayTrainMaterials {
-  body: MeshStandardMaterial;
-  roof: MeshStandardMaterial;
-  window: MeshStandardMaterial;
-  line: MeshStandardMaterial;
-  undercarriage: MeshStandardMaterial;
-  headlight: MeshStandardMaterial;
-  tailLight: MeshStandardMaterial;
-  dispose: () => void;
-}
-
-// 열차의 차체, 창문, 노선 띠와 조명에 사용할 색상과 표면 질감을 만든다.
+// 시제품의 닫힌 문·차창·전면 도색을 한 아틀라스에 구웠다. 모든 차량이 두 장만 공유한다.
 export function createSubwayTrainMaterials(
   lineColor: string,
-  bodyColor = "#3c4348",
-): SubwayTrainMaterials {
-  const materials = {
-    body: new MeshStandardMaterial({
-      color: bodyColor,
-      metalness: 0.72,
-      roughness: 0.28,
-    }),
-    roof: new MeshStandardMaterial({
-      color: "#22282c",
-      metalness: 0.45,
-      roughness: 0.5,
-    }),
-    window: new MeshStandardMaterial({
-      color: "#07141b",
-      emissive: new Color("#0b2731"),
-      emissiveIntensity: 0.65,
-      metalness: 0.35,
-      roughness: 0.18,
-    }),
-    line: new MeshStandardMaterial({
-      color: lineColor,
-      emissive: new Color(lineColor),
-      emissiveIntensity: 0.28,
-      metalness: 0.2,
-      roughness: 0.4,
-    }),
-    undercarriage: new MeshStandardMaterial({
-      color: "#111619",
-      metalness: 0.35,
-      roughness: 0.65,
-    }),
-    headlight: new MeshStandardMaterial({
-      color: "#fff8d5",
-      emissive: new Color("#fff1ae"),
-      emissiveIntensity: 3.2,
-      roughness: 0.2,
-    }),
-    tailLight: new MeshStandardMaterial({
-      color: "#ff3b3b",
-      emissive: new Color("#ff1212"),
-      emissiveIntensity: 2.4,
-      roughness: 0.25,
-    }),
+  bodyColor = "#ffffff",
+  onTextureLoad?: () => void,
+) {
+  const loader = new TextureLoader();
+  const loadTexture = (url: string) => {
+    if (typeof document === "undefined") return null;
+    const texture = loader.load(url, onTextureLoad);
+    texture.colorSpace = SRGBColorSpace;
+    texture.anisotropy = 4;
+    return texture;
   };
-
+  const map = loadTexture(liveryUrl);
+  const emissiveMap = loadTexture(lightsUrl);
+  const skin = new MeshStandardMaterial({
+    map,
+    emissiveMap,
+    emissive: emissiveMap ? "#ffffff" : "#000000",
+    emissiveIntensity: 0.74,
+    metalness: 0.18,
+    roughness: 0.39,
+    side: DoubleSide,
+  });
+  // 방향 비교 스토리에서만 창 아래의 초록 도장을 각 편성의 식별색으로 교체한다.
+  if (new Color(lineColor).getHex() !== 0x00a84d) {
+    skin.onBeforeCompile = (shader) => {
+      shader.uniforms.paintColor = { value: new Color(lineColor) };
+      shader.fragmentShader =
+        "uniform vec3 paintColor;\n" +
+        shader.fragmentShader.replace(
+          "#include <map_fragment>",
+          `#include <map_fragment>
+        float band = smoothstep(0.045, 0.22, diffuseColor.g - max(diffuseColor.r, diffuseColor.b));
+        diffuseColor.rgb = mix(diffuseColor.rgb, paintColor * (0.65 + diffuseColor.g), band);`,
+        );
+    };
+  }
+  const body = new MeshStandardMaterial({
+    color: bodyColor,
+    vertexColors: true,
+    metalness: 0.3,
+    roughness: 0.5,
+  });
+  const doorLight = new MeshBasicMaterial({
+    vertexColors: true,
+    blending: AdditiveBlending,
+    transparent: true,
+    depthWrite: false,
+    side: DoubleSide,
+    toneMapped: false,
+  });
+  doorLight.forceSinglePass = true;
   return {
-    ...materials,
+    body,
+    skin,
+    doorLight,
     dispose() {
-      Object.values(materials).forEach((material: Material) => {
-        material.dispose();
-      });
+      skin.dispose();
+      body.dispose();
+      doorLight.dispose();
+      map?.dispose();
+      emissiveMap?.dispose();
     },
   };
 }

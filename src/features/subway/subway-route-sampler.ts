@@ -24,7 +24,7 @@ export interface SubwayRouteProjection extends SubwayRoutePose {
 export interface SubwayRouteSampler {
   totalDistanceMeters: number;
   sample: (distanceMeters: number) => SubwayRoutePose;
-  project: (coordinate: SubwayCoordinate) => SubwayRouteProjection;
+  project: (coordinate: Readonly<SubwayCoordinate>) => SubwayRouteProjection;
 }
 
 // 차량의 앞뒤 대차 지점을 이어 polyline 모서리에서도 연속적인 진행 방향을 구한다.
@@ -101,12 +101,13 @@ export function createSubwayRouteSampler(
         distanceMeters,
         totalDistanceMeters,
       );
-      const segment =
-        segments.find(
-          (candidate) =>
-            wrappedDistanceMeters <
-            candidate.startDistanceMeters + candidate.lengthMeters,
-        ) ?? segments.at(-1)!;
+      let low = 0, high = segments.length - 1;
+      while (low < high) {
+        const mid = (low + high) >>> 1;
+        if (wrappedDistanceMeters < segments[mid + 1].startDistanceMeters) high = mid;
+        else low = mid + 1;
+      }
+      const segment = segments[low];
       const segmentProgress =
         (wrappedDistanceMeters - segment.startDistanceMeters) /
         segment.lengthMeters;
@@ -141,7 +142,7 @@ export function createSubwayRouteSampler(
 }
 
 function projectCoordinateToSegment(
-  coordinate: SubwayCoordinate,
+  coordinate: Readonly<SubwayCoordinate>,
   segment: RouteSegment,
 ): SubwayRouteProjection {
   const latitudeRadians = coordinate[1] * DEGREES_TO_RADIANS;
