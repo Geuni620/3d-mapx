@@ -2,6 +2,7 @@ import { useMemo, useReducer, useState } from "react";
 import { INITIAL_VIEW_STATE } from "../../app/map-config";
 import { SeoulSubwayMap } from "../../components/seoul-subway-map";
 import { SubwayLineInspector } from "../../components/subway-line-inspector";
+import type { SubwayLineNumber } from "./subway-constants";
 import { createSubwayVisualLevel } from "./subway-paths";
 import {
   createInitialSelectedLineNumberSet,
@@ -13,11 +14,13 @@ import {
   subwayLayerVisibilityReducer,
 } from "./subway-layer-visibility";
 
+const debug = import.meta.env.DEV && new URLSearchParams(window.location.search).get("debug") === "1";
+
 export function SeoulSubwayExplorer() {
   const [selectedLineNumberSet, dispatchSelectedLineNumberSet] = useReducer(
     selectedLineNumberSetReducer,
     undefined,
-    createInitialSelectedLineNumberSet,
+    () => debug ? createInitialSelectedLineNumberSet() : new Set<SubwayLineNumber>([2]),
   );
   const [layerVisibility, dispatchLayerVisibility] = useReducer(
     subwayLayerVisibilityReducer,
@@ -41,7 +44,7 @@ export function SeoulSubwayExplorer() {
         zoom={zoom}
         onZoomChange={setZoom}
       />
-      <SubwayLineInspector
+      {debug && <SubwayLineInspector
         className="absolute left-4 top-4 z-10"
         selectedLineNumberSet={selectedLineNumberSet}
         dispatchSelectedLineNumberSet={dispatchSelectedLineNumberSet}
@@ -49,7 +52,7 @@ export function SeoulSubwayExplorer() {
         dispatchLayerVisibility={dispatchLayerVisibility}
         visualLevel={visualLevel}
         zoom={zoom}
-      />
+      />}
     </div>
   );
 }
