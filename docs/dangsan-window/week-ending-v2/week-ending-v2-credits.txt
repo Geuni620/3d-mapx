@@ -1,0 +1,11 @@
+당산철교의 퇴근길 · 차창 너머
+
+게시글 설명에 붙일 표기
+3d-mapx로 렌더한 당산철교. 창작 차내 방송(합성 음성)과 직접 합성한 주행음.
+지도 OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors (ODbL) — https://www.openstreetmap.org/copyright
+OpenMapTiles 지도 스키마 CC BY 4.0, https://openmaptiles.org/ · https://creativecommons.org/licenses/by/4.0/ · https://openfreemap.org/
+지형 Mapzen Terrain Tiles, 표고 원자료 USGS(SRTM·GMTED2010) 및 NOAA(ETOPO1). 운행 시각 서울교통공사.
+글꼴 Noto Sans KR(SIL OFL 1.1). 음성 Supertonic 3 기본 M4 프리셋(BigScience Open RAIL-M). 자세한 자료별 출처는 상위 폴더 credits.txt, 대본은 week-ending.txt에 있다.
+
+촬영 정보
+시간표로 움직이는 내선 2280 열차 세 번째 객차의 왼쪽 창가를 따라간다. 실제 지리·시간표 위에 창틀, 실내등 반사, 대각 철재와 식생을 미술적으로 재구성했다. 트러스 형상·치수나 조명은 현장 실측값이 아니다. 노을의 방위는 서울 현지 태양 방향을 따르고 고도·크기·색과 수면 반사는 화면을 위해 조정했다. 영상은 헤드리스 WebGL 캔버스에서 렌더했다. 음성·주행음은 week-ending.mp4의 AAC 트랙을 그대로 복사했다.
