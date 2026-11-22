@@ -12,6 +12,7 @@ import {
   type SubwayRouteSampler,
 } from "./subway-route-sampler";
 import {
+  SUBWAY_TRAIN_CAR_LENGTH_METERS,
   SUBWAY_TRAIN_BOGIE_OFFSET_METERS,
   SUBWAY_TRAIN_CAR_SPACING_METERS,
 } from "./subway-train-dimensions";
@@ -125,7 +126,13 @@ function prepareRoute(direction: Direction) {
   ) {
     throw new Error(`시간표 정차 순서와 ${direction} 선형이 다릅니다. 시간표를 재생성해 주세요.`);
   }
-  return { sampler, stops: route.stops };
+  return {
+    sampler,
+    // 당산의 두 stop_position은 각 진행 방향의 승강장 끝에 있다. 모형 기준점은 선두차 중심이다.
+    stops: route.stops.map(stop => stop.name === "당산"
+      ? { ...stop, distanceMeters: stop.distanceMeters - SUBWAY_TRAIN_CAR_LENGTH_METERS / 2 }
+      : stop),
+  };
 }
 
 const routes = {
