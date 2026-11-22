@@ -1,0 +1,42 @@
+당산철교의 퇴근길 — final.mp4 및 동봉 PNG의 출처
+
+공유할 때 붙일 짧은 표기
+창작 대본 · 한국어 합성 음성(Supertone Supertonic 3) · 직접 합성한 객실 주행음
+OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors — https://www.openstreetmap.org/copyright
+지형 Mapzen Terrain Tiles (USGS, NOAA) · 운행시각 서울교통공사
+
+음성·소리
+1. 내레이션 문안은 이 영상용으로 새로 작성했다. 서울교통공사와 무관한 창작 방송이다.
+2. 음성은 Supertone Inc.의 Supertonic 3 한국어 기본 프리셋 M2로 로컬에서 합성했다. 프리셋에는 참조 녹음이나 실존 인물의 목소리를 입력하지 않았다.
+   가중치·프리셋 — BigScience Open RAIL-M. 용도 제한을 준수하는 상업적 이용이 가능하다. 제6조는 라이선스 제공자가 생성 출력에 권리를 주장하지 않는다고 명시한다. 부속서 A의 합성 사실 고지에 맞춰 화면과 메타데이터에 합성 음성임을 표시했다. 이 패키지는 완성 미디어만 포함한다.
+   공식 모델 설명 — https://huggingface.co/Supertone/supertonic-3
+   사용한 스냅샷 및 약관 — https://huggingface.co/supertone-oss-archive/supertonic-3/blob/aafc6e32416a594460b32413efc49d7fe4ce6d46/LICENSE
+   음성 생성 구현 — Supertonic 공식 ONNX 예제(MIT) 및 ONNX Runtime(MIT).
+   https://github.com/supertone-oss-archive/supertonic · https://onnxruntime.ai/
+3. 차륜 구름음, 객실 진동, 이음부 덜컹임은 대역별 난수 신호와 감쇠 공진으로 직접 합성했다. 차내 스피커의 초기 반사와 짧은 잔향도 수학적으로 만들었다. 외부 환경 녹음, 소리 샘플, 임펄스 응답, 음악을 사용하지 않았다. 이 부분에 적용되는 제3자 음원 라이선스는 없다.
+4. 실제 승무원 육성, 유튜브·뉴스 방송 음원, 앞 버전의 객실 현장음은 이 파일에 포함하지 않았다.
+
+글꼴
+Noto Sans KR — Copyright 2014–2021 Adobe, SIL Open Font License 1.1. 엔딩의 합성 고지 및 지도 출처 한 줄에 사용했다. 렌더 작업 중 사용 글리프만 추리고 굵기 550으로 인스턴스를 만들어 픽셀로 구웠다. 글꼴 파일은 배포하지 않는다.
+https://github.com/google/fonts/tree/main/ofl/notosanskr
+https://github.com/google/fonts/blob/main/ofl/notosanskr/OFL.txt
+
+지도·지형·시간표
+1. 선로·철교 및 도시 지물 — © OpenStreetMap contributors, Open Data Commons Open Database License 1.0 (ODbL). 선로의 두 궤도와 철교 양끝을 3D 지오메트리로 재구성했다.
+   https://www.openstreetmap.org/copyright
+   https://www.openstreetmap.org/way/261477607 · https://www.openstreetmap.org/way/640443224
+2. 강안·공원·도로·건물 윤곽 — OpenFreeMap이 제공한 OSM 기반 OpenMapTiles 벡터 타일의 20261115_080022_pt 스냅샷. OpenFreeMap은 상업적 이용을 허용한다. OpenMapTiles는 타일 도식·시각 설계에 CC BY 4.0, 프로젝트 코드에 BSD 3-Clause를 적용한다. OSM 지물 데이터의 라이선스는 ODbL이다. 이 영상은 타일을 재구성해 독자적인 노을·조명·재질로 렌더했다.
+   https://openfreemap.org/ · https://openfreemap.org/quick_start/
+   https://tiles.openfreemap.org/planet/20261115_080022_pt
+   © OpenMapTiles — https://openmaptiles.org/ · https://github.com/openmaptiles/openmaptiles/blob/master/LICENSE.md
+   https://creativecommons.org/licenses/by/4.0/
+3. 원경 능선 — Mapzen Terrain Tiles on AWS, Terrarium z9. 9/436/197과 9/436/198의 원자료 헤더에서 USGS SRTM, GMTED2010 및 NOAA ETOPO1을 확인했다. 해당 미국 연방기관의 공개 표고 원자료와 Mapzen 공급자별 출처 표기를 따른다. 영상의 능선에는 360m 간격으로 다시 샘플링한 격자를 사용했다.
+   Global GMTED2010 and SRTM terrain data courtesy of the U.S. Geological Survey. Global ETOPO1 terrain data courtesy of the U.S. National Oceanic and Atmospheric Administration.
+   https://registry.opendata.aws/terrain-tiles/ · https://github.com/tilezen/joerd/blob/master/docs/attribution.md
+   https://www.usgs.gov/faqs/where-can-i-get-global-elevation-data · https://www.ngdc.noaa.gov/mgg/global/dem_faq.html
+4. 운행시각 — 서울교통공사 「서울 도시철도 열차운행시각표」 2026-09-01판. 공공데이터포털의 이용허락범위는 ‘제한 없음’이다. 토요일 2호선 내선 2280의 시간표를 적용했고 역 사이 위치는 추정했다.
+   https://www.data.go.kr/data/15098251/fileData.do
+
+제작
+3d-mapx의 선로·대차 배치 및 지리 렌더링을 바탕으로 익명 통근열차 차체, 차창·문 패턴, 전두부와 객실 발광을 이 출력용으로 절차 생성했다. 서울교통공사 로고, 공식 차량 도색·안내 표지, 실물 사진·인물 이미지를 쓰지 않았다. 교량, 강물, 파도 법선, 하늘과 햇빛은 지오메트리 및 셰이더로 표현했다.
+렌더링 — Three.js (MIT), MapLibre GL JS (BSD 3-Clause) 기반 프로젝트. https://threejs.org/ · https://maplibre.org/
