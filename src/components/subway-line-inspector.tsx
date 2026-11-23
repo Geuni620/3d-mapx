@@ -78,7 +78,7 @@ export function SubwayLineInspector({
         visualLevel={visualLevel}
         zoom={zoom}
       />
-      <p className="mt-3 text-xs leading-relaxed text-zinc-300">내선 청록 · 외선 연두<br/>Ⅱ 정차 · ▥ 차량기지</p>
+      <p className="mt-3 text-xs leading-relaxed text-zinc-300">2호선 내선 청록 · 외선 연두<br/>주황 창 정차 · ▥ 차량기지</p>
       </div>
     </aside>
   );

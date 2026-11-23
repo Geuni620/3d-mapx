@@ -1,0 +1,35 @@
+.subway-train-hover-area {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  transform-origin: 0 0;
+  border: 1px solid #fbe4a3;
+  border-radius: 5px;
+  box-shadow: 0 0 0 1px #19211ed9;
+}
+
+.subway-train-hover-tooltip {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  width: max-content;
+  max-width: 224px;
+  padding: 8px 10px;
+  border: 1px solid #607269;
+  border-radius: 8px;
+  background: #102019f5;
+  color: #eff8ef;
+  font: 13px/1.4 system-ui, sans-serif;
+  box-shadow: 0 3px 12px #030a0777;
+}
+
+.subway-train-hover-tooltip div { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.subway-train-hover-tooltip > span { color: #c8d9cf; font-size: 12px; }
+.subway-train-hover-line { color: #fff; padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+
+.subway-map[data-map-theme="light"] .subway-train-hover-tooltip {
+  background: #fafbf2f7;
+  color: #22372d;
+  border-color: #96a99a;
+}
+.subway-map[data-map-theme="light"] .subway-train-hover-tooltip > span { color: #405e51; }
