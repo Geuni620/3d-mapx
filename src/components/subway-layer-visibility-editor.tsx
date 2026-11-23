@@ -54,7 +54,7 @@ export function SubwayLayerVisibilityEditor({
           onToggle={handleToggleStationCircleLayer}
         />
         <SubwayLayerVisibilityButton
-          label="2호선 Train"
+          label="열차"
           isVisible={layerVisibility.isTrainLayerVisible}
           onToggle={handleToggleTrainLayer}
         />

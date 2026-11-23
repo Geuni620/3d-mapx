@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { LayersList } from "@deck.gl/core";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import Map, { useControl, useMap } from "react-map-gl/maplibre";
@@ -10,6 +10,8 @@ import {
   createSubwayVisualLevel,
   createSubwayDeckLayers,
   createSubwayDisplayStations,
+  createSubwayRoutePaths,
+  createSubwayStationCircles,
   type SubwayVisualLevel,
 } from "../features/subway/subway-paths";
 import type { SubwayStationMapPoint } from "../features/subway/subway-geojson";
@@ -19,6 +21,8 @@ import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-i
 import { SeoulSubwayLayers } from "./seoul-subway-layers";
 import { DETAIL_START, DETAIL_END } from "../features/subway/line-2-main-simulation";
 import { Line2Service } from "./line-2-service";
+
+const SubwayFleetOverview = lazy(() => import("./subway-fleet-overview"));
 
 interface SeoulSubwayMapProps {
   selectedLineNumbers: SubwayLineNumber[];
@@ -47,15 +51,17 @@ export function SeoulSubwayMap({
     () => createSubwayDisplayStations(visibleStations),
     [visibleStations],
   );
+  const routePaths = useMemo(() => createSubwayRoutePaths(selectedLineNumbers), [selectedLineNumbers]);
+  const stationCircles = useMemo(() => createSubwayStationCircles(displayStations), [displayStations]);
   const subwayDeckLayers = useMemo(
     () =>
       createSubwayDeckLayers(
-        selectedLineNumbers,
-        displayStations,
+        routePaths,
+        stationCircles,
         layerVisibility,
         visualLevel,
       ),
-    [displayStations, layerVisibility, selectedLineNumbers, visualLevel],
+    [routePaths, stationCircles, layerVisibility, visualLevel],
   );
 
   return (
@@ -63,19 +69,25 @@ export function SeoulSubwayMap({
       initialViewState={INITIAL_VIEW_STATE}
       mapStyle={initialStyle}
       style={{ width: "100%", height: "100%" }}
-      onMove={(event) => {
-        const nextZoom = Number(event.viewState.zoom.toFixed(2));
-
-        const debug = import.meta.env.DEV && new URLSearchParams(location.search).get("debug")==="1";
-        const crossed = [13, DETAIL_START, DETAIL_END].some(z=>(zoom<z)!==(nextZoom<z));
-        if (zoom !== nextZoom && (debug || crossed || createSubwayVisualLevel(nextZoom).id !== visualLevel.id)) {
+      onZoom={({ viewState }) => {
+        const nextZoom = viewState.zoom;
+        const trainLayerChanged = [DETAIL_START, DETAIL_END].some((threshold) =>
+          (zoom < threshold) !== (nextZoom < threshold),
+        );
+        if (trainLayerChanged || (zoom > 13) !== (nextZoom > 13) || createSubwayVisualLevel(nextZoom) !== visualLevel) {
           onZoomChange(nextZoom);
         }
       }}
+      onZoomEnd={({ viewState }) => onZoomChange(viewState.zoom)}
     >
       <MapThemeColors theme={theme} />
       <SeoulSubwayLayers stations={displayStations} theme={theme} />
       <DeckRouteOverlay layers={subwayDeckLayers} />
+      {selectedLineNumbers.length > 0 && layerVisibility.isTrainLayerVisible && (
+        <Suspense fallback={null}>
+          <SubwayFleetOverview selectedLines={selectedLineNumbers} />
+        </Suspense>
+      )}
       {selectedLineNumbers.includes(2) && layerVisibility.isTrainLayerVisible && (
         <Line2Service zoom={zoom} />
       )}
@@ -136,7 +148,6 @@ function DeckRouteOverlay({ layers }: DeckRouteOverlayProps) {
     return () => {
       map.off("styledata", updateRouteLayers);
       map.off("idle", updateRouteLayers);
-      overlay.setProps({ layers: [] });
     };
   }, [layers, mapReference, overlay]);
 

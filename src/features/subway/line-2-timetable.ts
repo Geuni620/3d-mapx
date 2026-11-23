@@ -89,12 +89,12 @@ const holidays = new Set([
   "2027-12-27",
 ]);
 
-function serviceMidnight(timestampMs: number) {
+export function getSubwayServiceMidnight(timestampMs: number) {
   return Math.floor((timestampMs + 9 * HOUR - 3 * HOUR) / DAY) * DAY - 9 * HOUR;
 }
 
 export function getLine2ServiceDay(timestampMs: number): ServiceDay {
-  const localDate = new Date(serviceMidnight(timestampMs) + 9 * HOUR);
+  const localDate = new Date(getSubwayServiceMidnight(timestampMs) + 9 * HOUR);
   if (localDate.getUTCDay() === 0 || holidays.has(localDate.toISOString().slice(0, 10)))
     return "END";
   return localDate.getUTCDay() === 6 ? "SAT" : "DAY";
@@ -285,7 +285,7 @@ let activeSince = Infinity,
 
 // 영업일 안에서 동일한 차량 객체를 유지하고, 실제 시·종착 시각을 지날 때만 목록을 변경한다.
 export function getScheduledFleet(timestampMs: number): ScheduledTrain[] {
-  const midnight = serviceMidnight(timestampMs);
+  const midnight = getSubwayServiceMidnight(timestampMs);
   if (midnight !== cachedMidnight) {
     cachedMidnight = midnight;
     fleet = data.days[getLine2ServiceDay(timestampMs)].map((row) => createTrain(midnight, row));

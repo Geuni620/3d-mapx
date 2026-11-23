@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Layer, Source } from "react-map-gl/maplibre";
 import type { MapTheme } from "../app/seoul-daylight";
 import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-ids";
@@ -12,7 +13,7 @@ interface SeoulSubwayLayersProps {
 }
 
 export function SeoulSubwayLayers({ stations, theme }: SeoulSubwayLayersProps) {
-  const stationGeoJson = createSubwayStationGeoJson(stations);
+  const stationGeoJson = useMemo(() => createSubwayStationGeoJson(stations), [stations]);
 
   return (
     <Source id="seoul-subway-stations" type="geojson" data={stationGeoJson}>

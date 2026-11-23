@@ -82,48 +82,43 @@ export interface SubwayVisualLevel {
   stationCircleLabel: string;
 }
 
-/**
- * @description 지도 zoom을 렌더링 단계로 나눠 노선 두께와 역사 circle 크기를 조정한다.
- */
-export function createSubwayVisualLevel(zoom: number): SubwayVisualLevel {
-  if (zoom <= 10.75) {
-    return {
-      id: "overview",
-      label: "Overview",
-      zoomRangeLabel: "10.75 이하",
-      stationCircleLabel: "숨김",
-    };
-  }
-
-  if (zoom <= 12.4) {
-    return {
-      id: "network",
-      label: "Network",
-      zoomRangeLabel: "10.75 - 12.4",
-      stationCircleLabel: "숨김",
-    };
-  }
-
-  if (zoom <= 14.5) {
-    return {
-      id: "station",
-      label: "Station",
-      zoomRangeLabel: "12.4 - 14.5",
-      stationCircleLabel: "표시",
-    };
-  }
-
-  return {
+const SUBWAY_VISUAL_LEVELS = {
+  overview: {
+    id: "overview",
+    label: "Overview",
+    zoomRangeLabel: "10.75 이하",
+    stationCircleLabel: "숨김",
+  },
+  network: {
+    id: "network",
+    label: "Network",
+    zoomRangeLabel: "10.75 - 12.4",
+    stationCircleLabel: "숨김",
+  },
+  station: {
+    id: "station",
+    label: "Station",
+    zoomRangeLabel: "12.4 - 14.5",
+    stationCircleLabel: "표시",
+  },
+  inspection: {
     id: "inspection",
     label: "Inspection",
     zoomRangeLabel: "14.5 초과",
     stationCircleLabel: "강조",
-  };
+  },
+} satisfies Record<SubwayVisualLevel["id"], SubwayVisualLevel>;
+
+export function createSubwayVisualLevel(zoom: number): SubwayVisualLevel {
+  if (zoom <= 10.75) return SUBWAY_VISUAL_LEVELS.overview;
+  if (zoom <= 12.4) return SUBWAY_VISUAL_LEVELS.network;
+  if (zoom <= 14.5) return SUBWAY_VISUAL_LEVELS.station;
+  return SUBWAY_VISUAL_LEVELS.inspection;
 }
 
 export function createSubwayDeckLayers(
-  selectedLineNumbers: SubwayLineNumber[],
-  stations: SubwayStationMapPoint[],
+  routePaths: SubwayRoutePath[],
+  stationCircles: SubwayStationCircle[],
   layerVisibility: SubwayLayerVisibility,
   visualLevel: SubwayVisualLevel,
 ): LayersList {
@@ -131,10 +126,10 @@ export function createSubwayDeckLayers(
 
   return [
     ...(layerVisibility.isRouteLayerVisible
-      ? createSubwayRoutePathLayers(selectedLineNumbers, visualStyle.route)
+      ? createSubwayRoutePathLayers(routePaths, visualStyle.route)
       : []),
     ...(layerVisibility.isStationCircleLayerVisible
-      ? createSubwayStationCircleLayers(stations, visualStyle.stationCircle)
+      ? createSubwayStationCircleLayers(stationCircles, visualStyle.stationCircle)
       : []),
   ];
 }
@@ -165,12 +160,10 @@ export function createSubwayDisplayStations(
   });
 }
 
-export function createSubwayRoutePathLayers(
-  selectedLineNumbers: SubwayLineNumber[],
+function createSubwayRoutePathLayers(
+  routePaths: SubwayRoutePath[],
   visualStyle: SubwayRouteVisualStyle,
 ): LayersList {
-  const routePaths = createSubwayRoutePaths(selectedLineNumbers);
-
   const lineParameters = {
     depthWriteEnabled: false,
     depthCompare: "always" as const,
@@ -184,6 +177,7 @@ export function createSubwayRoutePathLayers(
       getPath: (route) => route.path,
       getColor: (route) => withAlpha(route.color, visualStyle.glow.alpha),
       getWidth: visualStyle.glow.width,
+      updateTriggers: { getColor: visualStyle.glow.alpha },
       widthUnits: "pixels",
       widthMinPixels: visualStyle.glow.minWidth,
       widthMaxPixels: visualStyle.glow.maxWidth,
@@ -201,6 +195,7 @@ export function createSubwayRoutePathLayers(
       getPath: (route) => route.path,
       getColor: (route) => withAlpha(route.color, visualStyle.aura.alpha),
       getWidth: visualStyle.aura.width,
+      updateTriggers: { getColor: visualStyle.aura.alpha },
       widthUnits: "pixels",
       widthMinPixels: visualStyle.aura.minWidth,
       widthMaxPixels: visualStyle.aura.maxWidth,
@@ -218,6 +213,7 @@ export function createSubwayRoutePathLayers(
       getPath: (route) => route.path,
       getColor: (route) => withAlpha(route.color, visualStyle.body.alpha),
       getWidth: visualStyle.body.width,
+      updateTriggers: { getColor: visualStyle.body.alpha },
       widthUnits: "pixels",
       widthMinPixels: visualStyle.body.minWidth,
       widthMaxPixels: visualStyle.body.maxWidth,
@@ -236,6 +232,7 @@ export function createSubwayRoutePathLayers(
       getColor: (route) =>
         withAlpha(route.highlightColor, visualStyle.highlight.alpha),
       getWidth: visualStyle.highlight.width,
+      updateTriggers: { getColor: visualStyle.highlight.alpha },
       widthUnits: "pixels",
       widthMinPixels: visualStyle.highlight.minWidth,
       widthMaxPixels: visualStyle.highlight.maxWidth,
@@ -250,22 +247,12 @@ export function createSubwayRoutePathLayers(
 }
 
 function createSubwayStationCircleLayers(
-  stations: SubwayStationMapPoint[],
+  stationCircles: SubwayStationCircle[],
   visualStyle: SubwayStationCircleVisualStyle,
 ): LayersList {
   if (!visualStyle.isVisible) {
     return [];
   }
-
-  const stationCircles = stations.map(
-    (station): SubwayStationCircle => ({
-      id: station.id,
-      lineNumber: station.lineNumber,
-      longitude: station.longitude,
-      latitude: station.latitude,
-      color: hexToRgb(SUBWAY_LINE_COLORS[station.lineNumber]),
-    }),
-  );
 
   const circleParameters = {
     depthWriteEnabled: false,
@@ -281,6 +268,7 @@ function createSubwayStationCircleLayers(
       getFillColor: (station) =>
         withAlpha(station.color, visualStyle.glow.alpha),
       getRadius: visualStyle.glow.radius,
+      updateTriggers: { getFillColor: visualStyle.glow.alpha },
       radiusUnits: "pixels",
       radiusMinPixels: visualStyle.glow.minRadius,
       radiusMaxPixels: visualStyle.glow.maxRadius,
@@ -297,6 +285,7 @@ function createSubwayStationCircleLayers(
       getFillColor: (station) =>
         withAlpha(station.color, visualStyle.border.alpha),
       getRadius: visualStyle.border.radius,
+      updateTriggers: { getFillColor: visualStyle.border.alpha },
       radiusUnits: "pixels",
       radiusMinPixels: visualStyle.border.minRadius,
       radiusMaxPixels: visualStyle.border.maxRadius,
@@ -353,7 +342,17 @@ function createSubwayStationCircleLayers(
   ];
 }
 
-function createSubwayRoutePaths(
+export function createSubwayStationCircles(stations: SubwayStationMapPoint[]): SubwayStationCircle[] {
+  return stations.map((station) => ({
+    id: station.id,
+    lineNumber: station.lineNumber,
+    longitude: station.longitude,
+    latitude: station.latitude,
+    color: hexToRgb(SUBWAY_LINE_COLORS[station.lineNumber]),
+  }));
+}
+
+export function createSubwayRoutePaths(
   selectedLineNumbers: SubwayLineNumber[],
 ): SubwayRoutePath[] {
   return selectedLineNumbers.flatMap((lineNumber) => {

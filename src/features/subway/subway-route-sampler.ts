@@ -52,6 +52,7 @@ export function sampleSubwayRouteChordPose(
 
 export function createSubwayRouteSampler(
   path: ReadonlyArray<readonly [number, number]>,
+  { closed = true }: { closed?: boolean } = {},
 ): SubwayRouteSampler | undefined {
   if (path.length < 2) {
     return undefined;
@@ -63,9 +64,7 @@ export function createSubwayRouteSampler(
   const firstCoordinate = coordinates[0];
   const lastCoordinate = coordinates.at(-1);
 
-  // 첫 적용 범위인 2호선 외선·내선은 순환선이므로 경로의 끝을 시작점과 연결한다.
-  // 1~8호선 확장 시에는 종착역이 있는 경로를 구분해 처리한다.
-  if (!coordinatesEqual(firstCoordinate, lastCoordinate)) {
+  if (closed && !coordinatesEqual(firstCoordinate, lastCoordinate)) {
     coordinates.push([...firstCoordinate]);
   }
 
@@ -97,19 +96,18 @@ export function createSubwayRouteSampler(
   return {
     totalDistanceMeters,
     sample(distanceMeters) {
-      const wrappedDistanceMeters = wrapDistance(
-        distanceMeters,
-        totalDistanceMeters,
-      );
+      const sampleDistanceMeters = closed
+        ? wrapDistance(distanceMeters, totalDistanceMeters)
+        : clamp(distanceMeters, 0, totalDistanceMeters);
       let low = 0, high = segments.length - 1;
       while (low < high) {
         const mid = (low + high) >>> 1;
-        if (wrappedDistanceMeters < segments[mid + 1].startDistanceMeters) high = mid;
+        if (sampleDistanceMeters < segments[mid + 1].startDistanceMeters) high = mid;
         else low = mid + 1;
       }
       const segment = segments[low];
       const segmentProgress =
-        (wrappedDistanceMeters - segment.startDistanceMeters) /
+        (sampleDistanceMeters - segment.startDistanceMeters) /
         segment.lengthMeters;
 
       return {
