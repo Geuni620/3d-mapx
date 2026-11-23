@@ -1,0 +1,43 @@
+.subway-theme-switch {
+  position: absolute;
+  z-index: 5;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid #58655e;
+  border-radius: 8px;
+  background: #0c1813ef;
+  color: #eef5ee;
+  font: 600 13px/1.3 system-ui, sans-serif;
+}
+
+.subway-theme-switch button {
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.subway-theme-switch button[aria-pressed="true"] { background: #294639; }
+.subway-theme-switch button:focus-visible { outline: 2px solid #acdbb8; }
+.subway-theme-switch span { padding-inline: 4px; font-size: 11px; }
+
+.subway-map[data-map-theme="light"] .subway-theme-switch,
+.subway-map[data-map-theme="light"] .line2-service-panel {
+  background: #fafbf4f5;
+  border-color: #a4afa0;
+  color: #20332a;
+}
+
+.subway-map[data-map-theme="light"] .subway-theme-switch button[aria-pressed="true"],
+.subway-map[data-map-theme="light"] .line2-service-actions :is(button, select) {
+  background: #dce9da;
+  color: #22362d;
+}
+
+.subway-map[data-map-theme="light"] .subway-theme-switch button:focus-visible { outline-color: #266245; }
+.subway-map[data-map-theme="light"] .line2-service-status,
+.subway-map[data-map-theme="light"] .line2-service-status a { color: #365348; }
+.subway-map[data-map-theme="light"] .line2-depot b { background: #fcfaf0ee; color: #43381d; }

@@ -1,9 +1,10 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { LayersList } from "@deck.gl/core";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import Map, { useControl, useMap } from "react-map-gl/maplibre";
 import { INITIAL_VIEW_STATE } from "../app/map-config";
-import { SEOUL_TRANSIT_DARK_STYLE } from "../app/map-style";
+import { getSeoulTransitColors, SEOUL_TRANSIT_STYLES } from "../app/map-style";
+import type { MapTheme } from "../app/seoul-daylight";
 import { SEOUL_SUBWAY_OSM_NETWORK } from "../features/subway/osm-subway-network";
 import {
   createSubwayVisualLevel,
@@ -24,6 +25,7 @@ interface SeoulSubwayMapProps {
   layerVisibility: SubwayLayerVisibility;
   visualLevel: SubwayVisualLevel;
   zoom: number;
+  theme: MapTheme;
   onZoomChange: (zoom: number) => void;
 }
 
@@ -32,8 +34,10 @@ export function SeoulSubwayMap({
   layerVisibility,
   visualLevel,
   zoom,
+  theme,
   onZoomChange,
 }: SeoulSubwayMapProps) {
+  const [initialStyle] = useState(() => SEOUL_TRANSIT_STYLES[theme]);
   const visibleStations = useMemo(
     () => createVisibleSubwayStations(selectedLineNumbers),
     [selectedLineNumbers],
@@ -57,7 +61,7 @@ export function SeoulSubwayMap({
   return (
     <Map
       initialViewState={INITIAL_VIEW_STATE}
-      mapStyle={SEOUL_TRANSIT_DARK_STYLE}
+      mapStyle={initialStyle}
       style={{ width: "100%", height: "100%" }}
       onMove={(event) => {
         const nextZoom = Number(event.viewState.zoom.toFixed(2));
@@ -69,13 +73,33 @@ export function SeoulSubwayMap({
         }
       }}
     >
-      <SeoulSubwayLayers stations={displayStations} />
+      <MapThemeColors theme={theme} />
+      <SeoulSubwayLayers stations={displayStations} theme={theme} />
       <DeckRouteOverlay layers={subwayDeckLayers} />
       {selectedLineNumbers.includes(2) && layerVisibility.isTrainLayerVisible && (
         <Line2Service zoom={zoom} />
       )}
     </Map>
   );
+}
+
+function MapThemeColors({ theme }: { theme: MapTheme }) {
+  const { current: mapReference } = useMap();
+  useEffect(() => {
+    const map = mapReference?.getMap();
+    if (!map) return;
+    const apply = () => {
+      for (const { layerId, property, value } of getSeoulTransitColors(theme)) {
+        if (map.getLayer(layerId) && map.getPaintProperty(layerId, property) !== value) {
+          map.setPaintProperty(layerId, property, value);
+        }
+      }
+    };
+    apply();
+    map.on("style.load", apply);
+    return () => { map.off("style.load", apply); };
+  }, [mapReference, theme]);
+  return null;
 }
 
 interface DeckRouteOverlayProps {
