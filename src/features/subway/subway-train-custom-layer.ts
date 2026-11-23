@@ -26,19 +26,36 @@ import {
 
 const LINE_2_COLOR = "#00a84d";
 const TRAIN_DISPLAY_ALTITUDE_METERS = 0;
+export interface TrainLayerBounds {
+  south: number;
+  north: number;
+  west: number;
+  east: number;
+}
+
+export interface TrainLayerContent {
+  update(timestamp: number, origin: MercatorCoordinate, bounds: TrainLayerBounds): boolean;
+  dispose(): void;
+}
+
 interface SubwayTrainCustomLayerOptions {
-  getTrains: () => readonly ScheduledTrain[];
+  id?: string;
+  getTrains?: () => readonly ScheduledTrain[];
+  createContent?: (scene: Scene, map: MapLibreMap) => TrainLayerContent;
   frozenTimestamp: number | null;
 }
 
 // 열차 모형과 이동 시뮬레이션을 MapLibre가 그릴 수 있는 Three.js 레이어로 묶는다.
 export function createSubwayTrainCustomLayer({
+  id = SUBWAY_TRAIN_LAYER_ID,
   getTrains,
+  createContent,
   frozenTimestamp,
 }: SubwayTrainCustomLayerOptions): CustomLayerInterface {
   let map: MapLibreMap | undefined;
   let renderer: WebGLRenderer | undefined;
   let prototype: SubwayTrainModel | undefined;
+  let content: TrainLayerContent | undefined;
   const scene = new Scene(),
     camera = new Camera();
   const pool: Group[] = [];
@@ -60,7 +77,6 @@ export function createSubwayTrainCustomLayer({
     if (
       !detailOpacity ||
       !renderer ||
-      !prototype ||
       !origin ||
       !projectionReady ||
       !contextAvailable ||
@@ -68,6 +84,13 @@ export function createSubwayTrainCustomLayer({
     )
       return;
     const timestamp = frozenTimestamp ?? trainFrameTimestamp();
+    if (content) {
+      const visible = content.update(timestamp, origin, { south, north, west, east });
+      if (visible || previouslyVisible) renderer.render(scene, camera);
+      previouslyVisible = visible;
+      return;
+    }
+    if (!prototype || !getTrains) return;
     let visible = 0;
     for (const train of getTrains()) {
       const motion = train.getMotion(timestamp);
@@ -145,7 +168,7 @@ export function createSubwayTrainCustomLayer({
   }
 
   return {
-    id: SUBWAY_TRAIN_LAYER_ID,
+    id,
     type: "custom",
     renderingMode: "3d",
     onAdd(nextMap) {
@@ -153,6 +176,7 @@ export function createSubwayTrainCustomLayer({
       // 타일·라벨·건물이 정지한 동안에는 투명 열차 캔버스만 갱신한다.
       const overlay = document.createElement("canvas");
       overlay.className = "line2-train-surface";
+      overlay.dataset.trainLayer = id;
       overlay.setAttribute("aria-hidden", "true");
       renderer = new WebGLRenderer({ canvas: overlay, alpha: true, antialias: true });
       renderer.setClearColor(0x000000, 0);
@@ -163,11 +187,15 @@ export function createSubwayTrainCustomLayer({
       const key = new DirectionalLight("#ffffff", 2.4);
       key.position.set(-30, -50, 90);
       scene.add(new AmbientLight("#b8d6dd", 1.8), key);
-      prototype = createSubwayTrainModel({
-        lineColor: LINE_2_COLOR,
-        carCount: LINE_2_MAIN_CAR_COUNT,
-        onTextureLoad: () => map?.triggerRepaint(),
-      });
+      if (createContent) {
+        content = createContent(scene, nextMap);
+      } else {
+        prototype = createSubwayTrainModel({
+          lineColor: LINE_2_COLOR,
+          carCount: LINE_2_MAIN_CAR_COUNT,
+          onTextureLoad: () => map?.triggerRepaint(),
+        });
+      }
       overlay.addEventListener("webglcontextlost", lost);
       overlay.addEventListener("webglcontextrestored", restored);
       document.addEventListener("visibilitychange", visibilityChanged);
@@ -199,6 +227,8 @@ export function createSubwayTrainCustomLayer({
     },
     onRemove() {
       pause();
+      content?.dispose();
+      content = undefined;
       document.removeEventListener("visibilitychange", visibilityChanged);
       if (renderer) {
         const canvas = renderer.domElement;

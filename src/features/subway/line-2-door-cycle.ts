@@ -1,5 +1,4 @@
 interface StopEvent {
-  station: string;
   arrivalMs: number | null;
   departureMs: number;
 }
