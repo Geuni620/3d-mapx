@@ -1,3 +1,4 @@
+import { useTrainClock } from "../features/night-pulse/train-clock";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LngLatBounds } from "maplibre-gl";
 import { Marker, useMap } from "react-map-gl/maplibre";
@@ -6,8 +7,8 @@ import { getScheduledFleet, type ScheduledTrain } from "../features/subway/line-
 import {
   detailBlend,
   DETAIL_START,
+  PULSE_DETAIL_START,
   DETAIL_END,
-  trainFrameTimestamp,
 } from "../features/subway/line-2-main-simulation";
 import { Line2FleetOverview } from "./line-2-fleet-overview";
 import { SubwayTrainLayer } from "./subway-train-layer";
@@ -26,12 +27,13 @@ const labels = { accelerating: "가속", cruising: "정속", braking: "감속", 
 const directionName = (train: ScheduledTrain) =>
   train.direction === "inner-loop" ? "내선" : "외선";
 
-export function Line2Service({ zoom, requestedTrain }: { zoom: number; requestedTrain: { id: string } | null }) {
+export function Line2Service({ zoom, requestedTrain, pulse }: { zoom: number; pulse: boolean; requestedTrain: { id: string } | null }) {
+  const clock = useTrainClock();
   const { current: mapRef } = useMap();
   const [frozen, setFrozen] = useState<number | null>(() =>
-    matchMedia("(prefers-reduced-motion: reduce)").matches ? trainFrameTimestamp() : null,
+    matchMedia("(prefers-reduced-motion: reduce)").matches ? clock() : null,
   );
-  const [fleet, setFleet] = useState(() => getScheduledFleet(frozen ?? trainFrameTimestamp()));
+  const [fleet, setFleet] = useState(() => getScheduledFleet(frozen ?? clock()));
   const [selectedId, select] = useState<string | null>(null);
   const [depot, setDepot] = useState<string | null>(null);
   const overviewSurface = useRef<HTMLDivElement>(null);
@@ -44,13 +46,13 @@ export function Line2Service({ zoom, requestedTrain }: { zoom: number; requested
   }, [requestedTrain]);
   useEffect(() => {
     const query = matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setFrozen(query.matches ? trainFrameTimestamp() : null);
+    const update = () => setFrozen(query.matches ? clock() : null);
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
-  }, []);
+  }, [clock]);
   useEffect(() => {
     const refresh = () => {
-      const next = getScheduledFleet(frozen ?? trainFrameTimestamp());
+      const next = getScheduledFleet(frozen ?? clock());
       setFleet((old) =>
         old.length === next.length && old.every((v, i) => v === next[i]) ? old : next,
       );
@@ -63,7 +65,7 @@ export function Line2Service({ zoom, requestedTrain }: { zoom: number; requested
       clearInterval(timer);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [frozen]);
+  }, [frozen, clock]);
   useEffect(() => {
     if (!selectedId || selected) return;
     select(null);
@@ -72,7 +74,7 @@ export function Line2Service({ zoom, requestedTrain }: { zoom: number; requested
     const map = mapRef?.getMap();
     if (!selected || !map) return;
     const update = () => {
-      const now = frozen ?? trainFrameTimestamp();
+      const now = frozen ?? clock();
       const state = selected.getLeadPose(now);
       const event = selected.getStopEvent(now);
       const stopped = event && now < event.departureMs;
@@ -92,7 +94,7 @@ export function Line2Service({ zoom, requestedTrain }: { zoom: number; requested
     update();
     const timer = frozen === null ? window.setInterval(update, 150) : undefined;
     return () => clearInterval(timer);
-  }, [selected, frozen, mapRef]);
+  }, [selected, frozen, mapRef, clock]);
   useEffect(() => {
     const map = mapRef?.getMap();
     if (!map) return;
@@ -112,7 +114,7 @@ export function Line2Service({ zoom, requestedTrain }: { zoom: number; requested
       if (!map) return;
       select(train.id);
       setDepot(null);
-      const now = frozen ?? trainFrameTimestamp();
+      const now = frozen ?? clock();
       const goal = train.getLeadPose(now).lead.coordinate;
       const targetPixels = map.project(goal);
       const container = map.getContainer();
@@ -125,7 +127,7 @@ export function Line2Service({ zoom, requestedTrain }: { zoom: number; requested
         animate && frozen === null
           ? Math.min(3200, 720 + 260 * Math.abs(18.25 - map.getZoom()) + 160 * Math.min(5, screens))
           : 0;
-      const { lead } = train.getLeadPose(frozen ?? trainFrameTimestamp() + duration);
+      const { lead } = train.getLeadPose(frozen ?? clock() + duration);
       // 방위를 유지한 채 선택 지점으로 접근해 같은 선로 위의 열차를 계속 읽게 한다.
       map.easeTo({
         center: lead.coordinate,
@@ -136,7 +138,7 @@ export function Line2Service({ zoom, requestedTrain }: { zoom: number; requested
         easing: (t) => t * t * t * (t * (6 * t - 15) + 10),
       });
     },
-    [mapRef, frozen],
+    [mapRef, frozen, clock],
   );
   const overview = useCallback(
     (animate = true) => {
@@ -164,13 +166,13 @@ export function Line2Service({ zoom, requestedTrain }: { zoom: number; requested
       if (initialized.current) return;
       initialized.current = true;
       const query = new URLSearchParams(location.search);
-      const trains = getScheduledFleet(frozen ?? trainFrameTimestamp());
+      const trains = getScheduledFleet(frozen ?? clock());
       if (query.get("view") === "line2" && trains.length) {
         const first =
           trains.find(
             (t) =>
               t.direction === "outer-loop" &&
-              t.getMotion(frozen ?? trainFrameTimestamp()).speedMetersPerSecond > 3,
+              t.getMotion(frozen ?? clock()).speedMetersPerSecond > 3,
           ) ?? trains[0];
         inspect(first, false);
       } else if (
@@ -188,11 +190,11 @@ export function Line2Service({ zoom, requestedTrain }: { zoom: number; requested
     return () => {
       map.off("load", initialize);
     };
-  }, [mapRef, frozen, inspect, overview]);
+  }, [mapRef, frozen, inspect, overview, clock]);
   const outer = fleet.filter((t) => t.direction === "outer-loop").length;
   return (
     <>
-      {zoom < DETAIL_END && (
+      {!pulse && zoom < DETAIL_END && (
         <div
           ref={overviewSurface}
           className="line2-symbol-plane"
@@ -206,11 +208,12 @@ export function Line2Service({ zoom, requestedTrain }: { zoom: number; requested
         </div>
       )}
       <SubwayTrainLayer
-        isActive={zoom >= DETAIL_START || selectedId !== null}
+        pulse={pulse}
+        isActive={zoom >= (pulse ? PULSE_DETAIL_START : DETAIL_START) || selectedId !== null}
         trains={fleet}
         frozenTimestamp={frozen}
       />
-      {DEPOTS.map((d) => (
+      {!pulse && DEPOTS.map((d) => (
         <Marker key={d.name} longitude={d.longitude} latitude={d.latitude} anchor="center">
           <button
             type="button"

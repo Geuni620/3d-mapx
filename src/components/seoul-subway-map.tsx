@@ -1,3 +1,4 @@
+import { attachNightPulseStyle } from "../features/night-pulse/night-pulse-style";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { LayersList } from "@deck.gl/core";
 import { MapboxOverlay } from "@deck.gl/mapbox";
@@ -19,9 +20,11 @@ import type { SubwayLineNumber } from "../features/subway/subway-constants";
 import type { SubwayLayerVisibility } from "../features/subway/subway-layer-visibility";
 import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-ids";
 import { SeoulSubwayLayers } from "./seoul-subway-layers";
-import { DETAIL_START, DETAIL_END } from "../features/subway/line-2-main-simulation";
+import { DETAIL_START, DETAIL_END, PULSE_DETAIL_START } from "../features/subway/line-2-main-simulation";
 import { Line2Service } from "./line-2-service";
 
+const NightPulse = lazy(() => import("../features/night-pulse/night-pulse"));
+const EMPTY_LAYERS: LayersList = [];
 const SubwayFleetOverview = lazy(() => import("./subway-fleet-overview"));
 
 interface SeoulSubwayMapProps {
@@ -30,6 +33,8 @@ interface SeoulSubwayMapProps {
   visualLevel: SubwayVisualLevel;
   zoom: number;
   theme: MapTheme;
+  pulse: boolean;
+  replay: string | null;
   onZoomChange: (zoom: number) => void;
 }
 
@@ -39,6 +44,8 @@ export function SeoulSubwayMap({
   visualLevel,
   zoom,
   theme,
+  pulse,
+  replay,
   onZoomChange,
 }: SeoulSubwayMapProps) {
   const [initialStyle] = useState(() => SEOUL_TRANSIT_STYLES[theme]);
@@ -56,13 +63,13 @@ export function SeoulSubwayMap({
   const stationCircles = useMemo(() => createSubwayStationCircles(displayStations), [displayStations]);
   const subwayDeckLayers = useMemo(
     () =>
-      createSubwayDeckLayers(
+      pulse ? EMPTY_LAYERS : createSubwayDeckLayers(
         routePaths,
         stationCircles,
         layerVisibility,
         visualLevel,
       ),
-    [routePaths, stationCircles, layerVisibility, visualLevel],
+    [routePaths, stationCircles, layerVisibility, visualLevel, pulse],
   );
 
   return (
@@ -72,7 +79,7 @@ export function SeoulSubwayMap({
       style={{ width: "100%", height: "100%" }}
       onZoom={({ viewState }) => {
         const nextZoom = viewState.zoom;
-        const trainLayerChanged = [DETAIL_START, DETAIL_END].some((threshold) =>
+        const trainLayerChanged = [DETAIL_START, DETAIL_END, PULSE_DETAIL_START].some((threshold) =>
           (zoom < threshold) !== (nextZoom < threshold),
         );
         if (trainLayerChanged || (zoom > 13) !== (nextZoom > 13) || createSubwayVisualLevel(nextZoom) !== visualLevel) {
@@ -81,22 +88,28 @@ export function SeoulSubwayMap({
       }}
       onZoomEnd={({ viewState }) => onZoomChange(viewState.zoom)}
     >
-      <MapThemeColors theme={theme} />
+      <MapThemeColors theme={theme} pulse={pulse} />
       <SeoulSubwayLayers stations={displayStations} theme={theme} />
       <DeckRouteOverlay layers={subwayDeckLayers} />
+      {pulse && <Suspense fallback={null}>
+        <NightPulse replay={replay} lines={selectedLineNumbers} stations={displayStations}
+          showRoutes={layerVisibility.isRouteLayerVisible}
+          showStations={layerVisibility.isStationCircleLayerVisible}
+          showTrains={layerVisibility.isTrainLayerVisible} />
+      </Suspense>}
       {selectedLineNumbers.length > 0 && layerVisibility.isTrainLayerVisible && (
         <Suspense fallback={null}>
-          <SubwayFleetOverview selectedLines={selectedLineNumbers} onLine2Focus={setRequestedTrain} />
+          <SubwayFleetOverview selectedLines={selectedLineNumbers} onLine2Focus={setRequestedTrain} pulse={pulse} />
         </Suspense>
       )}
       {selectedLineNumbers.includes(2) && layerVisibility.isTrainLayerVisible && (
-        <Line2Service zoom={zoom} requestedTrain={requestedTrain} />
+        <Line2Service zoom={zoom} requestedTrain={requestedTrain} pulse={pulse} />
       )}
     </Map>
   );
 }
 
-function MapThemeColors({ theme }: { theme: MapTheme }) {
+function MapThemeColors({ theme, pulse }: { theme: MapTheme; pulse: boolean }) {
   const { current: mapReference } = useMap();
   useEffect(() => {
     const map = mapReference?.getMap();
@@ -109,9 +122,10 @@ function MapThemeColors({ theme }: { theme: MapTheme }) {
       }
     };
     apply();
+    if (pulse) return attachNightPulseStyle(map);
     map.on("style.load", apply);
     return () => { map.off("style.load", apply); };
-  }, [mapReference, theme]);
+  }, [mapReference, theme, pulse]);
   return null;
 }
 

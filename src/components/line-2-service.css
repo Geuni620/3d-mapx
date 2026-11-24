@@ -87,10 +87,10 @@
 .line2-depot:focus-visible {
   outline: 2px solid #a7ecd0;
 }
-@media (max-width: 390px) {
+@media (max-width: 560px) {
   .line2-service-panel {
     right: 8px;
-    bottom: 30px;
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
 }
 

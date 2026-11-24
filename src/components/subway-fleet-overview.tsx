@@ -1,3 +1,4 @@
+import { useTrainClock } from "../features/night-pulse/train-clock";
 import { useEffect, useRef } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import { SUBWAY_LINE_COLORS, type SubwayLineNumber } from "../features/subway/subway-constants";
@@ -6,7 +7,7 @@ import {
   getSubwayServiceSecond,
   sampleSubwayTrip,
 } from "../features/subway/subway-timetable";
-import { DETAIL_START, detailBlend, trainFrameTimestamp } from "../features/subway/line-2-main-simulation";
+import { DETAIL_START, PULSE_DETAIL_START, detailBlend } from "../features/subway/line-2-main-simulation";
 import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-ids";
 import { createSubwayTrainCustomLayer } from "../features/subway/subway-train-custom-layer";
 import { createSubwayRollingStock } from "../features/subway/subway-rolling-stock";
@@ -15,10 +16,12 @@ import { SubwayTrainHover } from "./subway-train-hover";
 
 const DETAIL_LAYER_ID = "subway-fleet-detail";
 
-export default function SubwayFleetOverview({ selectedLines, onLine2Focus }: {
+export default function SubwayFleetOverview({ selectedLines, onLine2Focus, pulse }: {
+  pulse: boolean;
   selectedLines: readonly SubwayLineNumber[];
   onLine2Focus: (train: { id: string }) => void;
 }) {
+  const clock = useTrainClock();
   const { current: mapRef } = useMap();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lines = useRef(selectedLines);
@@ -32,10 +35,11 @@ export default function SubwayFleetOverview({ selectedLines, onLine2Focus }: {
     const map = mapRef?.getMap();
     if (!map) return;
     const attach = () => {
-      if (map.getZoom() < DETAIL_START || map.getLayer(DETAIL_LAYER_ID) ||
+      if (map.getZoom() < (pulse ? PULSE_DETAIL_START : DETAIL_START) || map.getLayer(DETAIL_LAYER_ID) ||
           !map.getLayer(SUBWAY_STATION_LABEL_LAYER_ID)) return;
       map.addLayer(createSubwayTrainCustomLayer({
         id: DETAIL_LAYER_ID,
+        now: clock, pulse,
         frozenTimestamp: null,
         createContent: (scene, instance) =>
           createSubwayRollingStock(scene, instance, () => lines.current, ready.current),
@@ -49,13 +53,13 @@ export default function SubwayFleetOverview({ selectedLines, onLine2Focus }: {
       map.off("styledata", attach);
       if (map.getLayer(DETAIL_LAYER_ID)) map.removeLayer(DETAIL_LAYER_ID);
     };
-  }, [mapRef]);
+  }, [mapRef, clock, pulse]);
 
   useEffect(() => {
     const map = mapRef?.getMap();
     const canvas = canvasRef.current;
     const context = canvas?.getContext("2d");
-    if (!map || !canvas || !context) return;
+    if (pulse || !map || !canvas || !context) return;
 
     let frame = 0;
     let viewport: Viewport = { width: 0, height: 0 };
@@ -71,7 +75,7 @@ export default function SubwayFleetOverview({ selectedLines, onLine2Focus }: {
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
     };
     const draw = () => {
-      const timestamp = trainFrameTimestamp();
+      const timestamp = clock();
       const second = Math.floor(timestamp / 1000);
       if (second !== lastSecond || lastLines !== lines.current) {
         lastSecond = second;
@@ -107,11 +111,11 @@ export default function SubwayFleetOverview({ selectedLines, onLine2Focus }: {
       cancelAnimationFrame(frame);
       map.off("resize", resize);
     };
-  }, [mapRef]);
+  }, [mapRef, clock, pulse]);
 
   return <>
-    <canvas ref={canvasRef} role="img" aria-label="시간표 기준 열차 위치"
-      className="pointer-events-none absolute inset-0 z-2 h-full w-full" />
+    {!pulse && <canvas ref={canvasRef} role="img" aria-label="시간표 기준 열차 위치"
+      className="pointer-events-none absolute inset-0 z-2 h-full w-full" />}
     <SubwayTrainHover selectedLines={selectedLines} onLine2Focus={onLine2Focus} />
   </>;
 }

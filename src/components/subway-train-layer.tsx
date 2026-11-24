@@ -1,3 +1,4 @@
+import { useTrainClock } from "../features/night-pulse/train-clock";
 import { useEffect, useRef, useState } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import type { ScheduledTrain } from "../features/subway/line-2-timetable";
@@ -9,12 +10,14 @@ import { createSubwayTrainCustomLayer } from "../features/subway/subway-train-cu
 
 interface SubwayTrainLayerProps {
   isActive: boolean;
+  pulse: boolean;
   trains: readonly ScheduledTrain[];
   frozenTimestamp: number | null;
 }
 
 // 첫 근접 확대에만 Three.js 레이어를 붙인다. 이후 줌 전환은 레이어의 불투명도를 사용한다.
-export function SubwayTrainLayer({ isActive, trains, frozenTimestamp }: SubwayTrainLayerProps) {
+export function SubwayTrainLayer({ isActive, trains, frozenTimestamp, pulse }: SubwayTrainLayerProps) {
+  const now = useTrainClock();
   const { current: mapReference } = useMap();
   const current = useRef(trains);
   const [hasDetailLayer, setHasDetailLayer] = useState(isActive);
@@ -48,7 +51,7 @@ export function SubwayTrainLayer({ isActive, trains, frozenTimestamp }: SubwayTr
 
       try {
         map.addLayer(
-          createSubwayTrainCustomLayer({ getTrains: () => current.current, frozenTimestamp }),
+          createSubwayTrainCustomLayer({ getTrains: () => current.current, frozenTimestamp, now, pulse }),
           SUBWAY_STATION_LABEL_LAYER_ID,
         );
       } catch (error) {
@@ -65,7 +68,7 @@ export function SubwayTrainLayer({ isActive, trains, frozenTimestamp }: SubwayTr
       map.off("idle", attachLayer);
       detachLayer();
     };
-  }, [hasDetailLayer, mapReference, frozenTimestamp]);
+  }, [hasDetailLayer, mapReference, frozenTimestamp, now, pulse]);
 
   return null;
 }

@@ -43,6 +43,8 @@ interface SubwayTrainCustomLayerOptions {
   getTrains?: () => readonly ScheduledTrain[];
   createContent?: (scene: Scene, map: MapLibreMap) => TrainLayerContent;
   frozenTimestamp: number | null;
+  now?: () => number;
+  pulse?: boolean;
 }
 
 // 열차 모형과 이동 시뮬레이션을 MapLibre가 그릴 수 있는 Three.js 레이어로 묶는다.
@@ -51,6 +53,8 @@ export function createSubwayTrainCustomLayer({
   getTrains,
   createContent,
   frozenTimestamp,
+  now = trainFrameTimestamp,
+  pulse = false,
 }: SubwayTrainCustomLayerOptions): CustomLayerInterface {
   let map: MapLibreMap | undefined;
   let renderer: WebGLRenderer | undefined;
@@ -83,7 +87,7 @@ export function createSubwayTrainCustomLayer({
       document.hidden
     )
       return;
-    const timestamp = frozenTimestamp ?? trainFrameTimestamp();
+    const timestamp = frozenTimestamp ?? now();
     if (content) {
       const visible = content.update(timestamp, origin, { south, north, west, east });
       if (visible || previouslyVisible) renderer.render(scene, camera);
@@ -202,7 +206,7 @@ export function createSubwayTrainCustomLayer({
     },
     render(_gl, { defaultProjectionData }) {
       if (!map || !renderer) return;
-      detailOpacity = detailBlend(map.getZoom());
+      detailOpacity = detailBlend(map.getZoom(), pulse);
       renderer.domElement.style.opacity = String(detailOpacity);
       if (!detailOpacity) {
         pause();

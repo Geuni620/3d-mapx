@@ -1,3 +1,5 @@
+import { parseReplayTime, TrainClock } from "../night-pulse/train-clock";
+import { trainFrameTimestamp } from "./line-2-main-simulation";
 import { useEffect, useMemo, useReducer, useState } from "react";
 import { INITIAL_VIEW_STATE } from "../../app/map-config";
 import { getSeoulDaylightTheme, type MapThemePreference } from "../../app/seoul-daylight";
@@ -16,6 +18,18 @@ import {
 import "./subway-map-theme.css";
 
 const debug = import.meta.env.DEV && new URLSearchParams(window.location.search).get("debug") === "1";
+const PULSE_STORAGE_KEY = "3d-mapx:night-pulse";
+
+function pulseRequested() {
+  return new URLSearchParams(location.search).get("pulse") === "1";
+}
+
+function readPulsePreference() {
+  if (pulseRequested()) return true;
+  try { return localStorage.getItem(PULSE_STORAGE_KEY) === "1"; }
+  catch { return false; }
+}
+
 const THEME_STORAGE_KEY = "3d-mapx:map-theme";
 const themeOptions = [
   { value: "auto", label: "자동" },
@@ -45,9 +59,28 @@ export function SeoulSubwayExplorer() {
     createInitialSubwayLayerVisibility,
   );
   const [zoom, setZoom] = useState(INITIAL_VIEW_STATE.zoom);
-  const [preference, setPreference] = useState<MapThemePreference>(readThemePreference);
+  const [preference, setPreference] = useState<MapThemePreference>(() => pulseRequested() ? "dark" : readThemePreference());
+  const [pulseEnabled, setPulseEnabled] = useState(readPulsePreference);
+  const [replay] = useState(() => {
+    const label = new URLSearchParams(location.search).get("at");
+    const wallTime = trainFrameTimestamp();
+    const target = parseReplayTime(label, wallTime);
+    return target === null ? null : { label, now: () => target + trainFrameTimestamp() - wallTime };
+  });
   const [daylightTheme, setDaylightTheme] = useState(() => getSeoulDaylightTheme(Date.now()));
   const theme = preference === "auto" ? daylightTheme : preference;
+
+  const pulse = theme === "dark" && pulseEnabled;
+  function togglePulse() {
+    const enabled = !pulseEnabled;
+    setPulseEnabled(enabled);
+    try { localStorage.setItem(PULSE_STORAGE_KEY, enabled ? "1" : "0"); } catch { /* 저장소 없이도 토글한다. */ }
+    if (!enabled && pulseRequested()) {
+      const url = new URL(location.href);
+      url.searchParams.delete("pulse");
+      history.replaceState(history.state, "", url);
+    }
+  }
 
   useEffect(() => {
     if (preference !== "auto") return;
@@ -79,14 +112,18 @@ export function SeoulSubwayExplorer() {
 
   return (
     <div className="relative h-screen w-screen subway-map" data-map-theme={theme}>
-      <SeoulSubwayMap
-        selectedLineNumbers={selectedLineNumbers}
-        layerVisibility={layerVisibility}
-        visualLevel={visualLevel}
-        zoom={zoom}
-        theme={theme}
-        onZoomChange={setZoom}
-      />
+      <TrainClock.Provider value={replay?.now ?? trainFrameTimestamp}>
+        <SeoulSubwayMap
+          selectedLineNumbers={selectedLineNumbers}
+          layerVisibility={layerVisibility}
+          visualLevel={visualLevel}
+          zoom={zoom}
+          theme={theme}
+          pulse={pulse}
+          replay={replay?.label ?? null}
+          onZoomChange={setZoom}
+        />
+      </TrainClock.Provider>
       <div className="subway-theme-switch" role="group" aria-label="지도 테마">
         {themeOptions.map(({ value, label }) =>
           <button key={value} type="button" aria-pressed={preference === value}
@@ -94,6 +131,9 @@ export function SeoulSubwayExplorer() {
             onClick={() => selectTheme(value)}>{label}</button>,
         )}
         {preference === "auto" && <span role="status">서울 {theme === "light" ? "낮" : "밤"}</span>}
+        <button type="button" disabled={theme === "light"} aria-pressed={pulse}
+          title={theme === "light" ? "다크 테마에서 사용" : undefined}
+          onClick={togglePulse}>야간 맥박</button>
       </div>
       {debug && <SubwayLineInspector
         className="absolute left-4 top-4 z-10"

@@ -1,8 +1,8 @@
+import { useTrainClock } from "../features/night-pulse/train-clock";
 import { useEffect, useState } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import type { MapMouseEvent } from "maplibre-gl";
 import { getScheduledFleet } from "../features/subway/line-2-timetable";
-import { trainFrameTimestamp } from "../features/subway/line-2-main-simulation";
 import {
   getActiveSubwayTrips, getSubwayServiceSecond, getSubwayTripJourney, sampleSubwayTrip,
 } from "../features/subway/subway-timetable";
@@ -53,6 +53,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
   selectedLines: readonly SubwayLineNumber[];
   onLine2Focus: (train: { id: string }) => void;
 }) {
+  const clock = useTrainClock();
   const { current: mapRef } = useMap();
   const [hover, setHover] = useState<HoveredTrain | null>(null);
 
@@ -61,7 +62,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
     if (!map) return;
     const canvas = map.getCanvas();
     const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-    let frozen = reduced.matches ? trainFrameTimestamp() : null;
+    let frozen = reduced.matches ? clock() : null;
     let pointer: Pixel | undefined;
     let frame = 0;
     let lastSecond = -1;
@@ -71,7 +72,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
 
     const update = (): HoveredTrain | null | undefined => {
       if (!pointer || map.isMoving()) return;
-      const timestamp = trainFrameTimestamp();
+      const timestamp = clock();
       const second = Math.floor(timestamp / 1000);
       if (lastSecond !== second) {
         lastSecond = second;
@@ -151,7 +152,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
       update()?.focus();
     };
     const motionPreference = () => {
-      frozen = reduced.matches ? trainFrameTimestamp() : null;
+      frozen = reduced.matches ? clock() : null;
       lastSecond = -1;
     };
 
@@ -173,7 +174,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
       map.off("moveend", update);
       leave();
     };
-  }, [mapRef, onLine2Focus, selectedLines]);
+  }, [mapRef, onLine2Focus, selectedLines, clock]);
 
   if (!hover) return null;
   const { icon, tooltip, line, origin, destination, headsign } = hover;

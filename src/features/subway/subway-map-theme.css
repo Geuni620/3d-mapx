@@ -41,3 +41,5 @@
 .subway-map[data-map-theme="light"] .line2-service-status,
 .subway-map[data-map-theme="light"] .line2-service-status a { color: #365348; }
 .subway-map[data-map-theme="light"] .line2-depot b { background: #fcfaf0ee; color: #43381d; }
+
+.subway-theme-switch button:disabled { opacity: .46; cursor: default; }
