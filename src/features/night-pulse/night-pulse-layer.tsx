@@ -10,6 +10,7 @@ import { sampleOverviewTrainIcon, type Pixel, type Viewport } from "../subway/su
 import type { SubwayRouteSampler } from "../subway/subway-route-sampler";
 import { getActiveSubwayTrips, getSubwayServiceSecond, sampleSubwayTrip, type TimetableTrip } from "../subway/subway-timetable";
 import { LINE_2_MAIN_CAR_COUNT } from "../subway/subway-train-model";
+import { createPulseSegmentClipper } from "./clip-pulse-segment";
 import { useTrainClock } from "./train-clock";
 
 const TRAIL_SECONDS = 150;
@@ -89,6 +90,15 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
     const reduced = matchMedia("(prefers-reduced-motion: reduce)");
     let viewport = { width: 0, height: 0 };
     let bounds = map.getBounds();
+    const makeClipper = () => {
+      const pad = 48;
+      const { width, height } = viewport;
+      const corners: [number, number][] = [
+        [-pad, -pad], [width + pad, -pad], [width + pad, height + pad], [-pad, height + pad],
+      ];
+      return createPulseSegmentClipper(corners.map(p => map.unproject(p).toArray()));
+    };
+    let clipSegment: ReturnType<typeof createPulseSegmentClipper>;
     let frame = 0;
     let dirty = true;
     let trailDirty = true;
@@ -97,7 +107,7 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
     let lastPaint = -Infinity;
     let trips: TimetableTrip[] = [];
     let main: ScheduledTrain[] = [];
-    let opacity = -1;
+    let previousDetail = -1;
     const placed: { x: number; y: number; width: number; height: number }[] = [];
     const popped = new Set<string>();
 
@@ -138,13 +148,18 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
         const paths = routes.map(({ lineNumber, pathSegments }) => {
           const path = new Path2D();
           for (const segment of pathSegments) {
-            let pen = false;
-            for (const coordinate of segment) {
-              const p = clipped(coordinate);
-              if (!p) { pen = false; continue; }
-              if (pen) path.lineTo(p.x, p.y);
-              else path.moveTo(p.x, p.y);
-              pen = true;
+            let previousEnd: SubwayCoordinate | undefined;
+            for (let i = 1; i < segment.length; i++) {
+              const visible = clipSegment(segment[i - 1], segment[i]);
+              if (!visible) { previousEnd = undefined; continue; }
+              const [start, end] = visible;
+              if (start !== previousEnd) {
+                const p = project(start);
+                path.moveTo(p.x, p.y);
+              }
+              const p = project(end);
+              path.lineTo(p.x, p.y);
+              previousEnd = end;
             }
           }
           return { path, color: SUBWAY_LINE_COLORS[lineNumber] };
@@ -224,15 +239,14 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
       for (const { line, points } of history.values()) {
         const paths = batches.get(line);
         if (!paths) continue;
-        let prior: Pixel | undefined;
-        for (let i = 0; i < points.length; i++) {
-          const p = clipped(points[i]);
-          if (p && prior) {
-            const band = Math.min(TRAIL_BANDS - 1, Math.floor(i * interval * TRAIL_BANDS / TRAIL_SECONDS));
-            paths[band].moveTo(prior.x, prior.y);
-            paths[band].lineTo(p.x, p.y);
-          }
-          prior = p;
+        for (let i = 1; i < points.length; i++) {
+          const visible = clipSegment(points[i - 1], points[i]);
+          if (!visible) continue;
+          const start = project(visible[0]);
+          const end = project(visible[1]);
+          const band = Math.min(TRAIL_BANDS - 1, Math.floor(i * interval * TRAIL_BANDS / TRAIL_SECONDS));
+          paths[band].moveTo(start.x, start.y);
+          paths[band].lineTo(end.x, end.y);
         }
       }
       trails!.lineCap = "round";
@@ -281,18 +295,22 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
       const time = now();
       const zoom = map.getZoom();
       const mobile = viewport.width <= 560;
-      const fade = showTrains ? 1 - detailBlend(zoom, true) : 0;
-      if (opacity !== fade) {
-        opacity = fade;
-        trails.canvas.style.opacity = trains.canvas.style.opacity = String(fade);
+      const detail = detailBlend(zoom, true);
+      const carOpacity = 1 - detail;
+      if (previousDetail !== detail) {
+        previousDetail = detail;
+        // 3D 차량으로 전환해도 노선색 잔광과 정차 표시는 남긴다.
+        trails.canvas.style.opacity = String(showTrains ? 1 - .35 * detail : 0);
+        trains.canvas.style.opacity = String(showTrains ? 1 - .25 * detail : 0);
       }
       if (dirty) {
         bounds = map.getBounds();
+        clipSegment = makeClipper();
         drawRoutes(zoom);
         trailDirty = true;
         dirty = false;
       }
-      if (fade <= 0) return;
+      if (!showTrains) return;
       const seconds = getSubwayServiceSecond(time);
       const second = Math.floor(time / 1000);
       if (second !== lastSecond) {
@@ -320,18 +338,20 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
         if (!head) return;
         const color = SUBWAY_LINE_COLORS[line];
         const intensity = .55 + .45 * Math.min(1, speed / 20);
-        const radius = Math.max(3.1, (zoom - 9.5) * 1.25) * (mobile ? .75 : 1);
+        const radius = Math.min(8, Math.max(3.1, (zoom - 9.5) * 1.25)) * (mobile ? .75 : 1);
         const first = history.get(key)?.points[0];
-        const neck = first && clipped(first);
+        const neck = first && clipSegment(first, coord);
         if (neck) {
+          const start = project(neck[0]);
           trains.strokeStyle = color;
           trains.lineWidth = width * 1.1;
           trains.beginPath();
-          trains.moveTo(neck.x, neck.y);
+          trains.moveTo(start.x, start.y);
           trains.lineTo(head.x, head.y);
           trains.stroke();
         }
-        if (zoom >= 13.6) {
+        if (zoom >= 13.6 && carOpacity > 0) {
+          trains.globalAlpha = carOpacity;
           const icon = sampleOverviewTrainIcon(sampler, distance, cars, project, viewport, zoom, coord, { physical: true });
           for (const car of icon?.cars ?? []) {
             if (!inScreen(car.front, viewport) || !inScreen(car.rear, viewport)) continue;
