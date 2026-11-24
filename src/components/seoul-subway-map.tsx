@@ -124,6 +124,8 @@ function DeckRouteOverlay({ layers }: DeckRouteOverlayProps) {
   const overlay = useControl(
     () => new MapboxOverlay({ interleaved: true, layers: [] }),
   );
+  // 재마운트 시 역 라벨이 준비되기 전 이전 레이어가 붙는 것을 막는다.
+  useEffect(() => () => overlay.setProps({ layers: [] }), [overlay]);
 
   useEffect(() => {
     const map = mapReference?.getMap();
