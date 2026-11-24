@@ -7,39 +7,50 @@ import {
   sampleSubwayTrip,
 } from "../features/subway/subway-timetable";
 import { DETAIL_START, detailBlend, trainFrameTimestamp } from "../features/subway/line-2-main-simulation";
-import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-ids";
+import { SUBWAY_STATION_LABEL_LAYER_ID, SUBWAY_TRAIN_LAYER_ID } from "../features/subway/subway-layer-ids";
 import { createSubwayTrainCustomLayer } from "../features/subway/subway-train-custom-layer";
+import { getScheduledFleet } from "../features/subway/line-2-timetable";
 import { createSubwayRollingStock } from "../features/subway/subway-rolling-stock";
-import { drawOverviewTrainIcon, sampleOverviewTrainIcon, type Project, type Viewport } from "../features/subway/subway-overview-icon";
+import { drawOverviewTrainIcon, sampleOverviewTrainIcon, type Viewport } from "../features/subway/subway-overview-icon";
+import { createSubwayScreenProjector } from "../features/subway/subway-screen-projection";
 import { SubwayTrainHover } from "./subway-train-hover";
 
-const DETAIL_LAYER_ID = "subway-fleet-detail";
-
-export default function SubwayFleetOverview({ selectedLines, onLine2Focus }: {
+export default function SubwayFleetOverview({ selectedLines, onLine2Focus, frozenLine2 }: {
   selectedLines: readonly SubwayLineNumber[];
   onLine2Focus: (train: { id: string }) => void;
+  frozenLine2: number | null;
 }) {
   const { current: mapRef } = useMap();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lines = useRef(selectedLines);
+  const line2Time = useRef(frozenLine2);
   const ready = useRef(new Set<SubwayLineNumber>());
 
   useEffect(() => {
     lines.current = selectedLines;
-  }, [selectedLines]);
+    line2Time.current = frozenLine2;
+    mapRef?.getMap().triggerRepaint();
+  }, [selectedLines, frozenLine2, mapRef]);
 
   useEffect(() => {
     const map = mapRef?.getMap();
     if (!map) return;
     const attach = () => {
-      if (map.getZoom() < DETAIL_START || map.getLayer(DETAIL_LAYER_ID) ||
+      if (map.getZoom() < DETAIL_START || map.getLayer(SUBWAY_TRAIN_LAYER_ID) ||
           !map.getLayer(SUBWAY_STATION_LABEL_LAYER_ID)) return;
-      map.addLayer(createSubwayTrainCustomLayer({
-        id: DETAIL_LAYER_ID,
-        frozenTimestamp: null,
-        createContent: (scene, instance) =>
-          createSubwayRollingStock(scene, instance, () => lines.current, ready.current),
-      }), SUBWAY_STATION_LABEL_LAYER_ID);
+      try {
+        map.addLayer(createSubwayTrainCustomLayer({
+          getLine2: (frameTime) => {
+            if (!lines.current.includes(2)) return null;
+            const timestamp = line2Time.current ?? frameTime;
+            return { trains: getScheduledFleet(timestamp), timestamp };
+          },
+          createContent: (scene, instance) =>
+            createSubwayRollingStock(scene, instance, () => lines.current, ready.current),
+        }), SUBWAY_STATION_LABEL_LAYER_ID);
+      } catch (error) {
+        console.error("Three.js 열차 레이어를 초기화하지 못했습니다.", error);
+      }
     };
     map.on("zoom", attach);
     map.on("styledata", attach);
@@ -47,7 +58,7 @@ export default function SubwayFleetOverview({ selectedLines, onLine2Focus }: {
     return () => {
       map.off("zoom", attach);
       map.off("styledata", attach);
-      if (map.getLayer(DETAIL_LAYER_ID)) map.removeLayer(DETAIL_LAYER_ID);
+      if (map.getLayer(SUBWAY_TRAIN_LAYER_ID)) map.removeLayer(SUBWAY_TRAIN_LAYER_ID);
     };
   }, [mapRef]);
 
@@ -59,7 +70,7 @@ export default function SubwayFleetOverview({ selectedLines, onLine2Focus }: {
 
     let frame = 0;
     let viewport: Viewport = { width: 0, height: 0 };
-    const project: Project = coordinate => map.project(coordinate);
+    const project = createSubwayScreenProjector(map);
     let lastSecond = -1;
     let lastLines: readonly SubwayLineNumber[] = [];
     let trips: ReturnType<typeof getActiveSubwayTrips> = [];
@@ -112,6 +123,6 @@ export default function SubwayFleetOverview({ selectedLines, onLine2Focus }: {
   return <>
     <canvas ref={canvasRef} role="img" aria-label="시간표 기준 열차 위치"
       className="pointer-events-none absolute inset-0 z-2 h-full w-full" />
-    <SubwayTrainHover selectedLines={selectedLines} onLine2Focus={onLine2Focus} />
+    <SubwayTrainHover selectedLines={selectedLines} onLine2Focus={onLine2Focus} frozenLine2={frozenLine2} />
   </>;
 }

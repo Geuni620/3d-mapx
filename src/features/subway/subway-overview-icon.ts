@@ -5,7 +5,7 @@ import { DETAIL_START } from "./line-2-main-simulation";
 
 export type Pixel = { x: number; y: number };
 export type Viewport = { width: number; height: number };
-export type Project = (coordinate: SubwayCoordinate) => Pixel;
+export type Project = (coordinate: SubwayCoordinate, altitude?: number) => Pixel;
 export type CarSegment = { front: Pixel; rear: Pixel };
 
 const CAR_PIXELS = 2;
@@ -37,14 +37,17 @@ export function sampleOverviewTrainIcon(
   zoom = 13,
   coordinate = sampler.sample(frontDistanceMeters).coordinate,
 ): OverviewTrainIcon | undefined {
-  const front = project(coordinate);
+  const heightAt = sampler.elevationAt;
+  const projectAt = (distance: number) => project(sampler.sample(distance).coordinate, heightAt?.(distance));
+  const frontAltitude = heightAt?.(frontDistanceMeters);
+  const front = project(coordinate, frontAltitude);
   const margin = zoom > SIZE_BLEND_START ? MAX_LENGTH + 450 * 2 ** (zoom - 16) : MAX_LENGTH;
   if (front.x < -margin || front.y < -margin ||
       front.x > viewport.width + margin || front.y > viewport.height + margin) {
     return undefined;
   }
-  const behind = project(sampler.sample(frontDistanceMeters - 10).coordinate);
-  const ahead = project(sampler.sample(frontDistanceMeters + 10).coordinate);
+  const behind = projectAt(frontDistanceMeters - 10);
+  const ahead = projectAt(frontDistanceMeters + 10);
   const tangent = Math.atan2(ahead.y - behind.y, ahead.x - behind.x);
   let angle = tangent;
   let tail = carCount * CAR_PIXELS;
@@ -54,10 +57,10 @@ export function sampleOverviewTrainIcon(
   if (zoom > SIZE_BLEND_START) {
     const t = Math.min(1, (zoom - SIZE_BLEND_START) / (DETAIL_START - SIZE_BLEND_START));
     const blend = t * t * (3 - 2 * t);
-    const nose = project(sampler.sample(frontDistanceMeters + CAR_HALF_METERS).coordinate);
-    const end = project(sampler.sample(
+    const nose = projectAt(frontDistanceMeters + CAR_HALF_METERS);
+    const end = projectAt(
       frontDistanceMeters - (carCount - 1) * SUBWAY_TRAIN_CAR_SPACING_METERS - CAR_HALF_METERS,
-    ).coordinate);
+    );
     const length = Math.hypot(nose.x - end.x, nose.y - end.y);
     if (length > 0.1) {
       const physicalAngle = Math.atan2(nose.y - end.y, nose.x - end.x);
@@ -71,7 +74,7 @@ export function sampleOverviewTrainIcon(
       const side = project([
         lng + Math.cos(heading) * CAR_HALF_WIDTH_METERS / (111320 * Math.cos(lat * Math.PI / 180)),
         lat - Math.sin(heading) * CAR_HALF_WIDTH_METERS / 111320,
-      ]);
+      ], frontAltitude);
       const width = Math.max(1.5, 2 * Math.abs(
         (side.x - front.x) * Math.sin(physicalAngle) - (side.y - front.y) * Math.cos(physicalAngle),
       ));
@@ -81,7 +84,7 @@ export function sampleOverviewTrainIcon(
       const cos = Math.cos(tangent);
       const sin = Math.sin(tangent);
       const point = (distance: number, offset: number) => {
-        const target = project(sampler.sample(distance).coordinate);
+        const target = projectAt(distance);
         const x = front.x + cos * offset;
         const y = front.y + sin * offset;
         return { x: x + (target.x - x) * blend, y: y + (target.y - y) * blend };
