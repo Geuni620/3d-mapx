@@ -112,7 +112,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
             focus: () => {
               onLine2Focus({ id: null });
               focusSubwayTrain(
-              map, pose.carCount, offset => sampleSubwayTrip(trip, getSubwayServiceSecond(clock.forecast(offset))) ?? pose,
+                map, pose.carCount, offset => sampleSubwayTrip(trip, getSubwayServiceSecond(clock.forecast(offset))) ?? pose,
                 !reduced.matches,
               );
             },
@@ -153,8 +153,10 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
       if (event.defaultPrevented) return;
       pointer = event.point;
       const train = update();
-      if (train) train.focus();
-      else {
+      if (train) {
+        event.preventDefault();
+        train.focus();
+      } else {
         if (map.isEasing()) map.stop();
         onLine2Focus({ id: null });
       }

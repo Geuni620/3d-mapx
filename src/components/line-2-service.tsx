@@ -28,8 +28,9 @@ const bounds = SEOUL_SUBWAY_OSM_NETWORK.serviceRoutes
   .reduce((box, p) => box.extend(p), new LngLatBounds());
 DEPOTS.forEach((d) => bounds.extend([d.longitude, d.latitude]));
 
-export function Line2Service({ zoom, requestedTrain, pulse }: {
-  pulse: boolean; zoom: number; requestedTrain: { id: string | null } | null;
+export function Line2Service({ zoom, requestedTrain, pulse, boardOpen, onInspect }: {
+  zoom: number; pulse: boolean; requestedTrain: { id: string | null } | null;
+  boardOpen: boolean; onInspect: () => void;
 }) {
   const clock = useTrainClockStore();
   const { time } = useTrainTime();
@@ -68,6 +69,7 @@ export function Line2Service({ zoom, requestedTrain, pulse }: {
     (train: ScheduledTrain, animate = true) => {
       const map = mapRef?.getMap();
       if (!map) return;
+      onInspect();
       select(train.id);
       setFollowing(true);
       setDepot(null);
@@ -76,12 +78,12 @@ export function Line2Service({ zoom, requestedTrain, pulse }: {
         frontDistanceMeters: train.getMotion(clock.forecast(offset)).frontDistanceMeters,
       }), animate && !matchMedia("(prefers-reduced-motion: reduce)").matches);
     },
-    [mapRef, clock],
+    [mapRef, clock, onInspect],
   );
 
   useEffect(() => {
     const map = mapRef?.getMap();
-    if (!map || !following || !selected) return;
+    if (!map || !following || !selected || boardOpen) return;
     const train = selected;
     const project = createSubwayScreenProjector(map);
     let frame = 0;
@@ -113,7 +115,8 @@ export function Line2Service({ zoom, requestedTrain, pulse }: {
       map.off("dragstart", cancel);
       window.removeEventListener("keydown", escape);
     };
-  }, [mapRef, following, selected, clock]);
+  }, [mapRef, following, selected, clock, boardOpen]);
+  useEffect(() => { if (boardOpen) setFollowing(false); }, [boardOpen]);
 
   const overview = useCallback(
     (animate = true) => {
@@ -178,7 +181,7 @@ export function Line2Service({ zoom, requestedTrain, pulse }: {
         >
           <Line2FleetOverview
             trains={fleet}
-            selectedId={selected?.id ?? null}
+            selectedId={boardOpen ? null : selected?.id ?? null}
           />
         </div>
       )}
@@ -200,7 +203,7 @@ export function Line2Service({ zoom, requestedTrain, pulse }: {
           </button>
         </Marker>
       ))}
-      {selected && <>
+      {selected && !boardOpen && <>
         {following && <Line2TrainMarker train={selected} />}
         <Line2FollowCard train={selected} time={time} following={following} onToggle={() => {
           if (!following) inspect(selected);

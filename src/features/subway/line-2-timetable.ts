@@ -292,6 +292,18 @@ function createTrain(
   };
 }
 
+export function getLine2StationDirections(station: string) {
+  const inner = data.stations["inner-loop"];
+  const outer = data.stations["outer-loop"];
+  const i = inner.indexOf(station);
+  const j = outer.indexOf(station);
+  if (i < 0 || j < 0) return null;
+  return {
+    "inner-loop": inner[(i + 1) % inner.length],
+    "outer-loop": outer[(j + 1) % outer.length],
+  };
+}
+
 export function getUpcomingStops(train: ScheduledTrain, time: number, count: number) {
   const stops = train.scheduledStops;
   let low = 1;
@@ -311,13 +323,19 @@ let activeSince = Infinity,
   activeUntil = -Infinity;
 
 // 영업일 안에서 동일한 차량 객체를 유지하고, 실제 시·종착 시각을 지날 때만 목록을 변경한다.
-export function getScheduledFleet(timestampMs: number): ScheduledTrain[] {
+export function getScheduledServiceFleet(timestampMs: number): readonly ScheduledTrain[] {
   const midnight = getSubwayServiceMidnight(timestampMs);
   if (midnight !== cachedMidnight) {
     cachedMidnight = midnight;
     fleet = data.days[getLine2ServiceDay(timestampMs)].map((row) => createTrain(midnight, row));
     activeSince = Infinity;
   }
+  return fleet;
+}
+
+export function getScheduledFleet(timestampMs: number): ScheduledTrain[] {
+  getScheduledServiceFleet(timestampMs);
+  const midnight = cachedMidnight;
   if (timestampMs >= activeSince && timestampMs < activeUntil) return active;
   active = [];
   activeSince = midnight + 3 * HOUR;
