@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import type { ScheduledTrain } from "../features/subway/line-2-timetable";
 import {
@@ -13,18 +13,22 @@ interface SubwayTrainLayerProps {
   frozenTimestamp: number | null;
 }
 
-// 열차 표시 조건에 따라 MapLibre 지도에 Three.js 열차 레이어를 붙이거나 제거한다.
+// 첫 근접 확대에만 Three.js 레이어를 붙인다. 이후 줌 전환은 레이어의 불투명도를 사용한다.
 export function SubwayTrainLayer({ isActive, trains, frozenTimestamp }: SubwayTrainLayerProps) {
   const { current: mapReference } = useMap();
   const current = useRef(trains);
+  const [hasDetailLayer, setHasDetailLayer] = useState(isActive);
   useEffect(() => {
     current.current = trains;
-    if (isActive) mapReference?.getMap().triggerRepaint();
+    if (isActive) {
+      setHasDetailLayer(true);
+      mapReference?.getMap().triggerRepaint();
+    }
   }, [trains, isActive, mapReference]);
   useEffect(() => {
     const map = mapReference?.getMap();
 
-    if (map === undefined) {
+    if (map === undefined || !hasDetailLayer) {
       return;
     }
 
@@ -36,7 +40,6 @@ export function SubwayTrainLayer({ isActive, trains, frozenTimestamp }: SubwayTr
     // 지도 스타일과 역사 라벨이 준비된 뒤 열차 레이어를 라벨 아래에 추가한다.
     const attachLayer = () => {
       if (
-        !isActive ||
         map.getLayer(SUBWAY_TRAIN_LAYER_ID) !== undefined ||
         map.getLayer(SUBWAY_STATION_LABEL_LAYER_ID) === undefined
       ) {
@@ -53,12 +56,7 @@ export function SubwayTrainLayer({ isActive, trains, frozenTimestamp }: SubwayTr
       }
     };
 
-    if (isActive) {
-      attachLayer();
-    } else {
-      detachLayer();
-    }
-
+    attachLayer();
     map.on("styledata", attachLayer);
     map.on("idle", attachLayer);
 
@@ -67,7 +65,7 @@ export function SubwayTrainLayer({ isActive, trains, frozenTimestamp }: SubwayTr
       map.off("idle", attachLayer);
       detachLayer();
     };
-  }, [isActive, mapReference, frozenTimestamp]);
+  }, [hasDetailLayer, mapReference, frozenTimestamp]);
 
   return null;
 }

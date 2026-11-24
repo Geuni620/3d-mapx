@@ -1,0 +1,20 @@
+3d-mapx 차량 외형 / Rolling stock exteriors
+
+The GLB files are adapted from the resource packs below and licensed under
+Creative Commons Attribution-ShareAlike 4.0 International.
+https://creativecommons.org/licenses/by-sa/4.0/
+
+1 — Flat face trains, LX9702 (Navi_LX9702), retextures by Soodari
+    https://modrinth.com/resourcepack/mtr-flat-face-trains/version/8A1wWGrp
+2 and 4 — Ricecooker trains, LX9702 (Navi_LX9702) and project contributors
+    https://modrinth.com/resourcepack/mtr4-ricecooker-trains/version/hATPVPIm
+3 — Seoul Metro 3000 series (Chopper), LX9702 (Navi_LX9702)
+    https://modrinth.com/resourcepack/seoul-metro-3000-series-chopper/version/JpedBIQ8
+5 through 8 — SMRT Trains, LX9702 (Navi_LX9702) and project contributors
+    https://modrinth.com/resourcepack/mtr4-smrt-trains/version/30vuaIn5
+
+Adaptation by 3d-mapx. The exterior cuboids and textures were assembled into
+meter-scale GLB meshes for cab and intermediate cars. Sliding door panels
+and their travel distances are retained. 3d-mapx adds time-based animation,
+door indicator lamps and generic running gear. Sounds and interiors were
+omitted. These assets are illustrative and are not official operator models.

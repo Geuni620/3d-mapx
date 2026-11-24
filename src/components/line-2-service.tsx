@@ -233,6 +233,9 @@ export function Line2Service({ zoom }: { zoom: number }) {
           >
             시간표 기준 추정
           </a>
+          <a href={`${import.meta.env.BASE_URL}rolling-stock/credits.txt`} target="_blank" rel="noreferrer">
+            차량 에셋
+          </a>
           <span>
             {fleet.length
               ? `내선 ${fleet.length - outer} · 외선 ${outer}편성`
