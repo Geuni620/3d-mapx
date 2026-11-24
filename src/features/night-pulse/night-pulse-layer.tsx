@@ -137,7 +137,7 @@ export function NightPulseLayer({ lines, stations, routes, frozenLine2, showRout
       ctx.textAlign = "center";
       const width = ctx.measureText(name).width + 14;
       const rect = { x: x - width / 2, y: y - 10, width, height: 20 };
-      if (rect.x < 0 || rect.y < 0 || rect.x + width > viewport.width ||
+      if (rect.x < 0 || rect.y < 0 || rect.x + width > viewport.width || rect.y + rect.height > viewport.height ||
           placed.some(a => a.x < rect.x + width && a.x + a.width > rect.x &&
             a.y < rect.y + rect.height && a.y + a.height > rect.y)) return false;
       placed.push(rect);
@@ -191,6 +191,7 @@ export function NightPulseLayer({ lines, stations, routes, frozenLine2, showRout
         route!.globalCompositeOperation = "source-over";
       }
       placed.length = 0;
+      const hubLabels: { name: string; point: Pixel; radius: number }[] = [];
       for (const hub of hubs) {
         const p = clipped(hub.coordinate);
         if (!p) continue;
@@ -214,8 +215,23 @@ export function NightPulseLayer({ lines, stations, routes, frozenLine2, showRout
         route!.fillStyle = "#fff4de";
         arc(route!, p, r * .24);
         route!.fill();
+        const clearance = r + 3;
+        placed.push({ x: p.x - clearance, y: p.y - clearance, width: 2 * clearance, height: 2 * clearance });
         if (hub.lines.length >= 3 && zoom >= 10.6 && zoom < 12.4)
-          label(route!, hub.name, p.x + r + 24, p.y, "#304649");
+          hubLabels.push({ name: hub.name, point: p, radius: clearance });
+      }
+      // 주변 링을 모두 예약한 뒤 이름을 배치해야 그리기 순서와 무관하게 겹침을 피한다.
+      for (const { name, point, radius } of hubLabels) {
+        route!.font = "600 12px system-ui, sans-serif";
+        const side = radius + route!.measureText(name).width / 2 + 10;
+        placement: for (const extra of [0, 12, 24, 36, 48]) {
+          const horizontal = side + extra;
+          const vertical = radius + 12 + extra;
+          for (const [dx, dy] of [[horizontal, 0], [-horizontal, 0], [0, -vertical], [0, vertical],
+            [side / 2, -vertical], [-side / 2, -vertical], [side / 2, vertical], [-side / 2, vertical]]) {
+            if (label(route!, name, point.x + dx, point.y + dy, "#304649")) break placement;
+          }
+        }
       }
       const bridge = zoom >= 12.6 && clipped(DANGSAN_ORIGIN);
       if (bridge) label(route!, "당산철교", bridge.x + 35, bridge.y + 18, "#876844");
