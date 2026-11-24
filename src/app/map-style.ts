@@ -1,4 +1,5 @@
 import type { StyleSpecification } from "maplibre-gl";
+import type { MapTheme } from "./seoul-daylight";
 
 const OPENMAPTILES_SOURCE = "openmaptiles";
 
@@ -129,3 +130,39 @@ export const SEOUL_TRANSIT_DARK_STYLE = {
     },
   ],
 } satisfies StyleSpecification;
+
+const LIGHT_COLORS = new Map<string, [property: string, color: string]>([
+  ["background", ["background-color", "#eef0e8"]],
+  ["landuse", ["fill-color", "#dedfd4"]],
+  ["park", ["fill-color", "#b6d0ad"]],
+  ["water", ["fill-color", "#a9cddc"]],
+  ["waterway", ["line-color", "#8bb5c8"]],
+  ["road-minor", ["line-color", "#b8bdb4"]],
+  ["road-major", ["line-color", "#9ca9a5"]],
+  ["rail", ["line-color", "#7d8c8e"]],
+  ["building", ["fill-extrusion-color", "#aeb8b8"]],
+]);
+
+const SEOUL_TRANSIT_LIGHT_STYLE: StyleSpecification = {
+  ...SEOUL_TRANSIT_DARK_STYLE,
+  name: "Seoul Transit Light",
+  layers: SEOUL_TRANSIT_DARK_STYLE.layers.map(layer => {
+    const color = LIGHT_COLORS.get(layer.id);
+    return color ? { ...layer, paint: { ...layer.paint, [color[0]]: color[1] } } : layer;
+  }),
+};
+
+export const SEOUL_TRANSIT_STYLES = {
+  dark: SEOUL_TRANSIT_DARK_STYLE,
+  light: SEOUL_TRANSIT_LIGHT_STYLE,
+} satisfies Record<MapTheme, StyleSpecification>;
+
+export function getSeoulTransitColors(theme: MapTheme) {
+  return SEOUL_TRANSIT_STYLES[theme].layers.flatMap(layer => {
+    const color = LIGHT_COLORS.get(layer.id);
+    if (!color || !("paint" in layer)) return [];
+    const property = color[0];
+    const value = (layer.paint as Record<string, unknown>)[property];
+    return typeof value === "string" ? [{ layerId: layer.id, property, value }] : [];
+  });
+}

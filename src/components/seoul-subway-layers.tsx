@@ -1,4 +1,5 @@
 import { Layer, Source } from "react-map-gl/maplibre";
+import type { MapTheme } from "../app/seoul-daylight";
 import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-ids";
 import {
   createSubwayStationGeoJson,
@@ -7,9 +8,10 @@ import {
 
 interface SeoulSubwayLayersProps {
   stations: SubwayStationMapPoint[];
+  theme: MapTheme;
 }
 
-export function SeoulSubwayLayers({ stations }: SeoulSubwayLayersProps) {
+export function SeoulSubwayLayers({ stations, theme }: SeoulSubwayLayersProps) {
   const stationGeoJson = createSubwayStationGeoJson(stations);
 
   return (
@@ -28,8 +30,8 @@ export function SeoulSubwayLayers({ stations }: SeoulSubwayLayersProps) {
           "text-ignore-placement": false,
         }}
         paint={{
-          "text-color": "#d8efe8",
-          "text-halo-color": "#020403",
+          "text-color": theme === "light" ? "#25352f" : "#d8efe8",
+          "text-halo-color": theme === "light" ? "#fffdf3" : "#020403",
           "text-halo-width": 1.2,
           "text-opacity": ["interpolate", ["linear"], ["zoom"], 12, 0, 13, 1],
         }}
