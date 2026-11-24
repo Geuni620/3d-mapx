@@ -16,24 +16,21 @@ import { drawOverviewTrainIcon, sampleOverviewTrainIcon, type Viewport } from ".
 import { createSubwayScreenProjector } from "../features/subway/subway-screen-projection";
 import { SubwayTrainHover } from "./subway-train-hover";
 
-export default function SubwayFleetOverview({ selectedLines, onLine2Focus, frozenLine2, pulse }: {
+export default function SubwayFleetOverview({ selectedLines, onLine2Focus, pulse }: {
   selectedLines: readonly SubwayLineNumber[];
   onLine2Focus: (train: { id: string }) => void;
-  frozenLine2: number | null;
   pulse: boolean;
 }) {
   const now = useTrainClock();
   const { current: mapRef } = useMap();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lines = useRef(selectedLines);
-  const line2Time = useRef(frozenLine2);
   const ready = useRef(new Set<SubwayLineNumber>());
 
   useEffect(() => {
     lines.current = selectedLines;
-    line2Time.current = frozenLine2;
     mapRef?.getMap().triggerRepaint();
-  }, [selectedLines, frozenLine2, mapRef]);
+  }, [selectedLines, mapRef]);
 
   useEffect(() => {
     const map = mapRef?.getMap();
@@ -46,8 +43,7 @@ export default function SubwayFleetOverview({ selectedLines, onLine2Focus, froze
           now, pulse,
           getLine2: (frameTime) => {
             if (!lines.current.includes(2)) return null;
-            const timestamp = line2Time.current ?? frameTime;
-            return { trains: getScheduledFleet(timestamp), timestamp };
+            return { trains: getScheduledFleet(frameTime), timestamp: frameTime };
           },
           createContent: (scene, instance) =>
             createSubwayRollingStock(scene, instance, () => lines.current, ready.current),
@@ -127,6 +123,6 @@ export default function SubwayFleetOverview({ selectedLines, onLine2Focus, froze
   return <>
     {!pulse && <canvas ref={canvasRef} role="img" aria-label="시간표 기준 열차 위치"
       className="pointer-events-none absolute inset-0 z-2 h-full w-full" />}
-    <SubwayTrainHover selectedLines={selectedLines} onLine2Focus={onLine2Focus} frozenLine2={frozenLine2} />
+    <SubwayTrainHover selectedLines={selectedLines} onLine2Focus={onLine2Focus} />
   </>;
 }

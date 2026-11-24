@@ -12,7 +12,6 @@ import { LINE_2_MAIN_CAR_COUNT } from "../features/subway/subway-train-model";
 interface Props {
   trains: readonly ScheduledTrain[];
   selectedId: string | null;
-  frozenTimestamp: number | null;
 }
 
 const COLORS = { "outer-loop": "#b4f395", "inner-loop": "#74e1cb" };
@@ -41,7 +40,7 @@ function drawNumber(context: CanvasRenderingContext2D, head: Pixel, train: Sched
   context.fillText(label, left + 6, top + 9.5);
 }
 
-export function Line2FleetOverview({ trains, selectedId, frozenTimestamp }: Props) {
+export function Line2FleetOverview({ trains, selectedId }: Props) {
   const now = useTrainClock();
   const { current: mapRef } = useMap();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -64,7 +63,7 @@ export function Line2FleetOverview({ trains, selectedId, frozenTimestamp }: Prop
     const lastDwell = new WeakMap<ScheduledTrain, number>();
     const project = createSubwayScreenProjector(map);
     const draw = () => {
-      const timestamp = frozenTimestamp ?? now();
+      const timestamp = now();
       const zoom = map.getZoom();
       context.clearRect(0, 0, viewport.width, viewport.height);
       let selection: VisibleTrain | undefined;
@@ -115,7 +114,7 @@ export function Line2FleetOverview({ trains, selectedId, frozenTimestamp }: Prop
       map.off("resize", resize);
       map.off("move", draw);
     };
-  }, [mapRef, frozenTimestamp, now]);
+  }, [mapRef, now]);
 
   return <canvas ref={canvasRef} aria-hidden="true" data-testid="line-2-fleet-overview"
     style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />;

@@ -28,7 +28,6 @@ type Props = {
   lines: readonly SubwayLineNumber[];
   stations: SubwayStationMapPoint[];
   routes: ReturnType<typeof createSubwayRoutePaths>;
-  frozenLine2: number | null;
   showRoutes: boolean;
   showStations: boolean;
   showTrains: boolean;
@@ -74,7 +73,7 @@ function arc(ctx: CanvasRenderingContext2D, p: Pixel, radius: number, start = 0,
 
 type Trail = { line: SubwayLineNumber; points: MercatorCoordinate[]; epoch: number; serviceDay: number };
 
-export function NightPulseLayer({ lines, stations, routes, frozenLine2, showRoutes, showStations, showTrains }: Props) {
+export function NightPulseLayer({ lines, stations, routes, showRoutes, showStations, showTrains }: Props) {
   const { current: mapRef } = useMap();
   const now = useTrainClock();
   const routeSurface = useRef<HTMLCanvasElement>(null);
@@ -258,7 +257,7 @@ export function NightPulseLayer({ lines, stations, routes, frozenLine2, showRout
         return pose && trackPoint(pose.sampler, pose.frontDistanceMeters, pose.front);
       });
       for (const train of main) remember(train, 2, ago => {
-        const sampleTime = (frozenLine2 ?? time) - ago * 1000;
+        const sampleTime = time - ago * 1000;
         if (sampleTime < train.departureMs) return;
         return trackPoint(train.sampler, train.getMotion(sampleTime).frontDistanceMeters);
       });
@@ -351,7 +350,7 @@ export function NightPulseLayer({ lines, stations, routes, frozenLine2, showRout
       if (second !== lastSecond) {
         lastSecond = second;
         trips = getActiveSubwayTrips(time, lines);
-        main = lines.includes(2) ? getScheduledFleet(frozenLine2 ?? time) : [];
+        main = lines.includes(2) ? getScheduledFleettime : [];
       }
       const interval = zoom < 10 ? TRAIL_STEP * 2 : TRAIL_STEP;
       const epoch = Math.floor(time / (interval * 1000)) * interval * 1000;
@@ -433,7 +432,7 @@ export function NightPulseLayer({ lines, stations, routes, frozenLine2, showRout
           pose.speedMetersPerSecond, pose.dwelling ? pose.dwellElapsedSeconds : -1, pose.dwellSeconds);
       }
       for (const train of main) {
-        const line2Time = frozenLine2 ?? time;
+        const line2Time = time;
         const motion = train.getMotion(line2Time);
         const coordinate = train.sampler.sample(motion.frontDistanceMeters).coordinate;
         const stop = motion.phase === "dwelling" ? train.getStopEvent(line2Time) : null;
@@ -453,7 +452,7 @@ export function NightPulseLayer({ lines, stations, routes, frozenLine2, showRout
       map.off("resize", resize);
       map.off("move", move);
     };
-  }, [mapRef, now, lines, stations, routes, frozenLine2, showRoutes, showStations, showTrains]);
+  }, [mapRef, now, lines, stations, routes, showRoutes, showStations, showTrains]);
 
   return <>
     <canvas ref={routeSurface} className="night-pulse-surface night-pulse-routes" aria-hidden="true" />

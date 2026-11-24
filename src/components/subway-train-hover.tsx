@@ -1,4 +1,4 @@
-import { useTrainClock } from "../features/night-pulse/train-clock";
+import { useTrainClockStore } from "../features/night-pulse/train-clock";
 import { useEffect, useState } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import type { MapMouseEvent } from "maplibre-gl";
@@ -50,12 +50,11 @@ function distanceToIcon(point: Pixel, icon: OverviewTrainIcon) {
   return nearest;
 }
 
-export function SubwayTrainHover({ selectedLines, onLine2Focus, frozenLine2 }: {
+export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
   selectedLines: readonly SubwayLineNumber[];
   onLine2Focus: (train: { id: string }) => void;
-  frozenLine2: number | null;
 }) {
-  const now = useTrainClock();
+  const clock = useTrainClockStore();
   const { current: mapRef } = useMap();
   const [hover, setHover] = useState<HoveredTrain | null>(null);
 
@@ -73,12 +72,12 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus, frozenLine2 }: {
 
     const update = (): HoveredTrain | null | undefined => {
       if (!pointer || map.isMoving()) return;
-      const timestamp = now();
+      const timestamp = clock.now();
       const second = Math.floor(timestamp / 1000);
       if (lastSecond !== second) {
         lastSecond = second;
         otherTrips = getActiveSubwayTrips(timestamp, selectedLines);
-        line2Trains = selectedLines.includes(2) ? getScheduledFleet(frozenLine2 ?? timestamp) : [];
+        line2Trains = selectedLines.includes(2) ? getScheduledFleet(timestamp) : [];
       }
       const zoom = map.getZoom();
       const viewport = { width: canvas.clientWidth, height: canvas.clientHeight };
@@ -110,14 +109,14 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus, frozenLine2 }: {
             ...journey,
             headsign: `${journey.destination}행`,
             focus: () => focusSubwayTrain(
-              map, pose.carCount, offset => sampleSubwayTrip(trip, seconds + offset / 1000) ?? pose,
+              map, pose.carCount, offset => sampleSubwayTrip(trip, getSubwayServiceSecond(clock.forecast(offset))) ?? pose,
               !reduced.matches,
             ),
           };
         });
       }
       for (const train of line2Trains) {
-        const motion = train.getMotion(frozenLine2 ?? timestamp);
+        const motion = train.getMotion(timestamp);
         const icon = sampleOverviewTrainIcon(train.sampler, motion.frontDistanceMeters, LINE_2_MAIN_CAR_COUNT, project, viewport, zoom);
         consider(icon, 2, () => ({
           origin: train.origin,
@@ -129,7 +128,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus, frozenLine2 }: {
             onLine2Focus({ id: train.id });
             focusSubwayTrain(map, LINE_2_MAIN_CAR_COUNT, offset => ({
               sampler: train.sampler,
-              frontDistanceMeters: train.getMotion(frozenLine2 ?? timestamp + offset).frontDistanceMeters,
+              frontDistanceMeters: train.getMotion(clock.forecast(offset)).frontDistanceMeters,
             }), !reduced.matches);
           },
         }));
@@ -169,7 +168,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus, frozenLine2 }: {
       map.off("moveend", update);
       leave();
     };
-  }, [mapRef, onLine2Focus, selectedLines, frozenLine2, now]);
+  }, [mapRef, onLine2Focus, selectedLines, clock]);
 
   if (!hover) return null;
   const { icon, tooltip, line, origin, destination, headsign } = hover;

@@ -1,4 +1,4 @@
-import { useTrainClock } from "../features/night-pulse/train-clock";
+import { useTrainClockStore, useTrainTime } from "../features/night-pulse/train-clock";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LngLatBounds } from "maplibre-gl";
 import { Marker, useMap } from "react-map-gl/maplibre";
@@ -25,12 +25,13 @@ const labels = { accelerating: "가속", cruising: "정속", braking: "감속", 
 const directionName = (train: ScheduledTrain) =>
   train.direction === "inner-loop" ? "내선" : "외선";
 
-export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
-  pulse: boolean; zoom: number; requestedTrain: { id: string } | null; frozen: number | null;
+export function Line2Service({ zoom, requestedTrain, pulse }: {
+  pulse: boolean; zoom: number; requestedTrain: { id: string } | null;
 }) {
-  const clock = useTrainClock();
+  const clock = useTrainClockStore();
+  const { time } = useTrainTime();
   const { current: mapRef } = useMap();
-  const [fleet, setFleet] = useState(() => getScheduledFleet(frozen ?? clock()));
+  const fleet = getScheduledFleet(time);
   const [selectedId, select] = useState<string | null>(null);
   const [depot, setDepot] = useState<string | null>(null);
   const overviewSurface = useRef<HTMLDivElement>(null);
@@ -42,22 +43,6 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
     setDepot(null);
   }, [requestedTrain]);
   useEffect(() => {
-    const refresh = () => {
-      const next = getScheduledFleet(frozen ?? clock());
-      setFleet((old) =>
-        old.length === next.length && old.every((v, i) => v === next[i]) ? old : next,
-      );
-    };
-    refresh();
-    if (frozen !== null) return;
-    const timer = window.setInterval(refresh, 1000);
-    document.addEventListener("visibilitychange", refresh);
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", refresh);
-    };
-  }, [frozen, clock]);
-  useEffect(() => {
     if (!selectedId || selected) return;
     select(null);
   }, [selectedId, selected]);
@@ -65,7 +50,7 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
     const map = mapRef?.getMap();
     if (!selected || !map) return;
     const update = () => {
-      const now = frozen ?? clock();
+      const now = clock.now();
       const state = selected.getLeadPose(now);
       const event = selected.getStopEvent(now);
       const stopped = event && now < event.departureMs;
@@ -83,9 +68,8 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
       if (speed.current && speed.current.value !== text) speed.current.value = text;
     };
     update();
-    const timer = frozen === null ? window.setInterval(update, 150) : undefined;
-    return () => clearInterval(timer);
-  }, [selected, frozen, mapRef, clock]);
+    return clock.subscribe(update);
+  }, [selected, mapRef, clock]);
   useEffect(() => {
     const map = mapRef?.getMap();
     if (!map) return;
@@ -105,7 +89,7 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
       if (!map) return;
       select(train.id);
       setDepot(null);
-      const now = frozen ?? clock();
+      const now = clock.now();
       const goal = train.getLeadPose(now).lead;
       const targetPixels = createSubwayScreenProjector(map)(goal.coordinate, train.sampler.elevationAt?.(goal.distanceMeters));
       const container = map.getContainer();
@@ -115,10 +99,10 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
       );
       const screens = travel / Math.max(1, container.clientWidth);
       const duration =
-        animate && frozen === null
+        animate && !matchMedia("(prefers-reduced-motion: reduce)").matches
           ? Math.min(3200, 720 + 260 * Math.abs(18.25 - map.getZoom()) + 160 * Math.min(5, screens))
           : 0;
-      const { lead } = train.getLeadPose(frozen ?? clock() + duration);
+      const { lead } = train.getLeadPose(clock.forecast(duration));
       const view = { zoom: 18.25, pitch: 55, bearing: map.getBearing() };
       // 방위를 유지한 채 선택 지점으로 접근해 같은 선로 위의 열차를 계속 읽게 한다.
       map.easeTo({
@@ -129,7 +113,7 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
         easing: (t) => t * t * t * (t * (6 * t - 15) + 10),
       });
     },
-    [mapRef, frozen, clock],
+    [mapRef, clock],
   );
   const overview = useCallback(
     (animate = true) => {
@@ -144,10 +128,10 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
         pitch: 0,
         bearing: 0,
         linear: true,
-        duration: animate && frozen === null ? 1000 : 0,
+        duration: animate && !matchMedia("(prefers-reduced-motion: reduce)").matches ? 1000 : 0,
       });
     },
-    [mapRef, frozen],
+    [mapRef],
   );
   const initialized = useRef(false);
   useEffect(() => {
@@ -157,13 +141,13 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
       if (initialized.current) return;
       initialized.current = true;
       const query = new URLSearchParams(location.search);
-      const trains = getScheduledFleet(frozen ?? clock());
+      const trains = getScheduledFleet(clock.now());
       if (query.get("view") === "line2" && trains.length) {
         const first =
           trains.find(
             (t) =>
               t.direction === "outer-loop" &&
-              t.getMotion(frozen ?? clock()).speedMetersPerSecond > 3,
+              t.getMotion(clock.now()).speedMetersPerSecond > 3,
           ) ?? trains[0];
         inspect(first, false);
       } else if (
@@ -181,7 +165,7 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
     return () => {
       map.off("load", initialize);
     };
-  }, [mapRef, frozen, inspect, overview, clock]);
+  }, [mapRef, inspect, overview, clock]);
   const outer = fleet.filter((t) => t.direction === "outer-loop").length;
   return (
     <>
@@ -194,7 +178,6 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
           <Line2FleetOverview
             trains={fleet}
             selectedId={selected?.id ?? null}
-            frozenTimestamp={frozen}
           />
         </div>
       )}

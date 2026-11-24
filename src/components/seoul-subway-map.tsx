@@ -1,5 +1,4 @@
 import { attachNightPulseStyle } from "../features/night-pulse/night-pulse-style";
-import { useTrainClock } from "../features/night-pulse/train-clock";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { LayersList } from "@deck.gl/core";
 import { MapboxOverlay } from "@deck.gl/mapbox";
@@ -35,7 +34,6 @@ interface SeoulSubwayMapProps {
   zoom: number;
   theme: MapTheme;
   pulse: boolean;
-  replay: string | null;
   onZoomChange: (zoom: number) => void;
 }
 
@@ -46,21 +44,10 @@ export function SeoulSubwayMap({
   zoom,
   theme,
   pulse,
-  replay,
   onZoomChange,
 }: SeoulSubwayMapProps) {
-  const now = useTrainClock();
   const [initialStyle] = useState(() => SEOUL_TRANSIT_STYLES[theme]);
   const [requestedTrain, setRequestedTrain] = useState<{ id: string } | null>(null);
-  const [frozenLine2, setFrozenLine2] = useState<number | null>(() =>
-    matchMedia("(prefers-reduced-motion: reduce)").matches ? now() : null,
-  );
-  useEffect(() => {
-    const query = matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setFrozenLine2(query.matches ? now() : null);
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, [now]);
   const visibleStations = useMemo(
     () => createVisibleSubwayStations(selectedLineNumbers),
     [selectedLineNumbers],
@@ -103,8 +90,8 @@ export function SeoulSubwayMap({
       <SeoulSubwayLayers stations={displayStations} theme={theme} />
       <DeckRouteOverlay layers={subwayDeckLayers} />
       {pulse && <Suspense fallback={null}>
-        <NightPulse replay={replay} lines={selectedLineNumbers} stations={displayStations}
-          routes={routePaths} frozenLine2={frozenLine2}
+        <NightPulse lines={selectedLineNumbers} stations={displayStations}
+          routes={routePaths}
           showRoutes={layerVisibility.isRouteLayerVisible}
           showStations={layerVisibility.isStationCircleLayerVisible}
           showTrains={layerVisibility.isTrainLayerVisible} />
@@ -112,11 +99,11 @@ export function SeoulSubwayMap({
       {selectedLineNumbers.length > 0 && layerVisibility.isTrainLayerVisible && (
         <Suspense fallback={null}>
           <SubwayFleetOverview selectedLines={selectedLineNumbers} onLine2Focus={setRequestedTrain}
-            frozenLine2={frozenLine2} pulse={pulse} />
+            pulse={pulse} />
         </Suspense>
       )}
       {selectedLineNumbers.includes(2) && layerVisibility.isTrainLayerVisible && (
-        <Line2Service zoom={zoom} requestedTrain={requestedTrain} frozen={frozenLine2} pulse={pulse} />
+        <Line2Service zoom={zoom} requestedTrain={requestedTrain} pulse={pulse} />
       )}
     </Map>
   );
