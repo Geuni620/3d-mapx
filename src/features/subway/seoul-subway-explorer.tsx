@@ -3,7 +3,6 @@ import { INITIAL_VIEW_STATE } from "../../app/map-config";
 import { getSeoulDaylightTheme, type MapThemePreference } from "../../app/seoul-daylight";
 import { SeoulSubwayMap } from "../../components/seoul-subway-map";
 import { SubwayLineInspector } from "../../components/subway-line-inspector";
-import type { SubwayLineNumber } from "./subway-constants";
 import { createSubwayVisualLevel } from "./subway-paths";
 import {
   createInitialSelectedLineNumberSet,
@@ -38,7 +37,7 @@ export function SeoulSubwayExplorer() {
   const [selectedLineNumberSet, dispatchSelectedLineNumberSet] = useReducer(
     selectedLineNumberSetReducer,
     undefined,
-    () => debug ? createInitialSelectedLineNumberSet() : new Set<SubwayLineNumber>([2]),
+    createInitialSelectedLineNumberSet,
   );
   const [layerVisibility, dispatchLayerVisibility] = useReducer(
     subwayLayerVisibilityReducer,

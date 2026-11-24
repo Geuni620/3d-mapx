@@ -120,3 +120,13 @@ node scripts/generate-osm-subway-network.mjs --refresh
 - `--refresh` 실행 결과는 기존 JSON과 달라질 수 있으므로 변경 내용을 반드시 지도에서 확인한다.
 - 생성된 JSON은 앱에서 사용하는 정적 데이터이므로 커밋 대상이다.
 - `/private/tmp/3d-mapx-osm-subway` 아래의 XML 캐시는 임시 원본이므로 커밋하지 않는다.
+
+## 시간표 지도 생성
+
+생성기가 출력하는 호선별 JSON의 `serviceRoutes`와 [서울교통공사 시간표 CSV](https://www.data.go.kr/data/15098251/fileData.do)를 사용한다. 기존 지도의 선형을 유지하려면 OSM 생성기를 임시 작업 디렉터리의 복사본에서 실행하고, 그 출력 폴더를 인자로 넘긴다.
+
+```bash
+python3 scripts/generate-subway-timetable.py timetable.csv osm-output-data --edition 2026-09-01
+```
+
+결과에는 시간표 원본 해시와 호선별 매칭 결과가 들어 있다. 2호선 본선은 전용 시간표를 사용하고 이 파일에는 지선만 포함한다. 역 순서와 선로를 맞출 수 없는 운행은 제외한다.
