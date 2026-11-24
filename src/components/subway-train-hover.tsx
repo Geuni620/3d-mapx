@@ -2,6 +2,7 @@ import { useTrainClockStore } from "../features/night-pulse/train-clock";
 import { useEffect, useState } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import type { MapMouseEvent } from "maplibre-gl";
+import { line2Headsign } from "../features/subway/line-2-presentation";
 import { getScheduledFleet } from "../features/subway/line-2-timetable";
 import {
   getActiveSubwayTrips, getSubwayServiceSecond, getSubwayTripJourney, sampleSubwayTrip,
@@ -52,7 +53,7 @@ function distanceToIcon(point: Pixel, icon: OverviewTrainIcon) {
 
 export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
   selectedLines: readonly SubwayLineNumber[];
-  onLine2Focus: (train: { id: string }) => void;
+  onLine2Focus: (train: { id: string | null }) => void;
 }) {
   const clock = useTrainClockStore();
   const { current: mapRef } = useMap();
@@ -108,10 +109,13 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
           return {
             ...journey,
             headsign: `${journey.destination}행`,
-            focus: () => focusSubwayTrain(
+            focus: () => {
+              onLine2Focus({ id: null });
+              focusSubwayTrain(
               map, pose.carCount, offset => sampleSubwayTrip(trip, getSubwayServiceSecond(clock.forecast(offset))) ?? pose,
-              !reduced.matches,
-            ),
+                !reduced.matches,
+              );
+            },
           };
         });
       }
@@ -121,9 +125,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
         consider(icon, 2, () => ({
           origin: train.origin,
           destination: train.destination,
-          headsign: train.origin === train.destination
-            ? train.direction === "inner-loop" ? "내선순환" : "외선순환"
-            : `${train.destination}행`,
+          headsign: line2Headsign(train),
           focus: () => {
             onLine2Focus({ id: train.id });
             focusSubwayTrain(map, LINE_2_MAIN_CAR_COUNT, offset => ({
@@ -148,8 +150,14 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
     const leave = () => { pointer = undefined; canvas.style.cursor = ""; setHover(null); };
     const cameraMove = () => { canvas.style.cursor = ""; setHover(null); };
     const click = (event: MapMouseEvent) => {
+      if (event.defaultPrevented) return;
       pointer = event.point;
-      update()?.focus();
+      const train = update();
+      if (train) train.focus();
+      else {
+        if (map.isEasing()) map.stop();
+        onLine2Focus({ id: null });
+      }
     };
 
     map.on("mousemove", move);

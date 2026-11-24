@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SEOUL_SUBWAY_OSM_NETWORK } from "./osm-subway-network";
-import { getScheduledFleet, getLine2ServiceDay } from "./line-2-timetable";
+import { getScheduledFleet, getUpcomingStops, getLine2ServiceDay } from "./line-2-timetable";
 
 const kst = (text: string) => Date.parse(text + "+09:00");
 
@@ -90,4 +90,15 @@ describe("서울교통공사 2026-09-01 본선 운행시각표", () => {
     expect(getLine2ServiceDay(kst("2026-11-22T06:00:00"))).toBe("END");
     expect(getLine2ServiceDay(kst("2026-10-05T12:00:00"))).toBe("END");
   });
+});
+
+it("평일 21:02 외선 2455의 다음 세 정차역과 도착·출발 시각을 정차 패턴에서 읽는다", () => {
+  const now = Date.parse("2026-11-23T21:02:00+09:00");
+  const train = getScheduledFleet(now).find(item => item.number === "2455")!;
+  expect(getUpcomingStops(train, now, 3)).toEqual([
+    { station: "당산", arrivalMs: now + 60_000, departureMs: now + 90_000 },
+    { station: "영등포구청", arrivalMs: now + 180_000, departureMs: now + 210_000 },
+    { station: "문래", arrivalMs: now + 270_000, departureMs: now + 300_000 },
+  ]);
+  expect(getUpcomingStops(train, now + 60_000, 1)[0].station).toBe("영등포구청");
 });

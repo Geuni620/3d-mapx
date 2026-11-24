@@ -47,7 +47,7 @@ export function SeoulSubwayMap({
   onZoomChange,
 }: SeoulSubwayMapProps) {
   const [initialStyle] = useState(() => SEOUL_TRANSIT_STYLES[theme]);
-  const [requestedTrain, setRequestedTrain] = useState<{ id: string } | null>(null);
+  const [requestedTrain, setRequestedTrain] = useState<{ id: string | null } | null>(null);
   const visibleStations = useMemo(
     () => createVisibleSubwayStations(selectedLineNumbers),
     [selectedLineNumbers],

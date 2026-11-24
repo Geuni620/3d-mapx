@@ -19,7 +19,7 @@ import {
 import { LINE_2_MAIN_CAR_COUNT } from "./subway-train-model";
 
 type ServiceDay = "DAY" | "SAT" | "END";
-type Direction = "inner-loop" | "outer-loop";
+export type Direction = "inner-loop" | "outer-loop";
 
 interface TimetableData {
   edition: string;
@@ -100,6 +100,12 @@ export function getLine2ServiceDay(timestampMs: number): ServiceDay {
   return localDate.getUTCDay() === 6 ? "SAT" : "DAY";
 }
 
+export interface ScheduledStop {
+  station: string;
+  arrivalMs: number | null;
+  departureMs: number | null;
+}
+
 export interface ScheduledTrain extends SubwayTrainSimulation {
   id: string;
   number: string;
@@ -109,6 +115,7 @@ export interface ScheduledTrain extends SubwayTrainSimulation {
   arrivalMs: number;
   origin: string;
   destination: string;
+  scheduledStops: readonly ScheduledStop[];
   getStopEvent(
     timestampMs: number,
   ): { station: string; arrivalMs: number | null; departureMs: number } | null;
@@ -184,6 +191,16 @@ function createTrain(
   const departureMs = dayStart + departure * 1_000;
   const arrivalMs = departureMs + duration * 1_000;
   const id = `${dayStart}/${direction}/${number}`;
+  const names = data.stations[direction];
+  const stationAt = (index: number) => names[(first + index) % names.length];
+  const scheduledStops: ScheduledStop[] = [
+    { station: stationAt(0), arrivalMs: null, departureMs },
+    ...legs.map((leg, i) => ({
+      station: stationAt(i + 1),
+      arrivalMs: departureMs + leg.arrival * 1_000,
+      departureMs: i + 1 < legs.length ? departureMs + legs[i + 1].departure * 1_000 : null,
+    })),
+  ];
 
   function findLegIndex(elapsed: number) {
     let low = 0,
@@ -227,13 +244,10 @@ function createTrain(
     const leg = legs[legIndex];
     // 역 사이에서는 현재 구간의 출발역, 정차 중에는 다음 구간의 출발역을 가리킨다.
     const stopIndex = elapsed >= leg.arrival ? legIndex + 1 : legIndex;
-    const leaving = legs[stopIndex].departure;
-    if (elapsed > leaving + 4) return null;
-    return {
-      station: data.stations[direction][(first + stopIndex) % route.stops.length],
-      arrivalMs: stopIndex === 0 ? null : departureMs + legs[stopIndex - 1].arrival * 1_000,
-      departureMs: departureMs + leaving * 1_000,
-    };
+    const stop = scheduledStops[stopIndex];
+    const leaving = stop.departureMs ?? arrivalMs;
+    if (time > leaving + 4_000) return null;
+    return { ...stop, departureMs: leaving };
   }
 
   function getCarPose(front: number, carIndex: number): SubwayTrainCarPose {
@@ -258,7 +272,8 @@ function createTrain(
     direction,
     sampler: route.sampler,
     origin: data.stations[direction][first],
-    destination: data.stations[direction][(first + legs.length) % route.stops.length],
+    destination: stationAt(legs.length),
+    scheduledStops,
     getMotion,
     getStopEvent,
     getLeadPose(time) {
@@ -275,6 +290,18 @@ function createTrain(
       };
     },
   };
+}
+
+export function getUpcomingStops(train: ScheduledTrain, time: number, count: number) {
+  const stops = train.scheduledStops;
+  let low = 1;
+  let high = stops.length;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (stops[mid].arrivalMs! <= time) low = mid + 1;
+    else high = mid;
+  }
+  return stops.slice(low, low + count) as (ScheduledStop & { arrivalMs: number })[];
 }
 
 let cachedMidnight = NaN,
