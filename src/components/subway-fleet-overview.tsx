@@ -11,10 +11,14 @@ import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-i
 import { createSubwayTrainCustomLayer } from "../features/subway/subway-train-custom-layer";
 import { createSubwayRollingStock } from "../features/subway/subway-rolling-stock";
 import { drawOverviewTrainIcon, sampleOverviewTrainIcon, type Project, type Viewport } from "../features/subway/subway-overview-icon";
+import { SubwayTrainHover } from "./subway-train-hover";
 
 const DETAIL_LAYER_ID = "subway-fleet-detail";
 
-export default function SubwayFleetOverview({ selectedLines }: { selectedLines: readonly SubwayLineNumber[] }) {
+export default function SubwayFleetOverview({ selectedLines, onLine2Focus }: {
+  selectedLines: readonly SubwayLineNumber[];
+  onLine2Focus: (train: { id: string }) => void;
+}) {
   const { current: mapRef } = useMap();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lines = useRef(selectedLines);
@@ -105,8 +109,9 @@ export default function SubwayFleetOverview({ selectedLines }: { selectedLines: 
     };
   }, [mapRef]);
 
-  return (
+  return <>
     <canvas ref={canvasRef} role="img" aria-label="시간표 기준 열차 위치"
       className="pointer-events-none absolute inset-0 z-2 h-full w-full" />
-  );
+    <SubwayTrainHover selectedLines={selectedLines} onLine2Focus={onLine2Focus} />
+  </>;
 }

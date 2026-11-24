@@ -42,6 +42,7 @@ export function SeoulSubwayMap({
   onZoomChange,
 }: SeoulSubwayMapProps) {
   const [initialStyle] = useState(() => SEOUL_TRANSIT_STYLES[theme]);
+  const [requestedTrain, setRequestedTrain] = useState<{ id: string } | null>(null);
   const visibleStations = useMemo(
     () => createVisibleSubwayStations(selectedLineNumbers),
     [selectedLineNumbers],
@@ -85,11 +86,11 @@ export function SeoulSubwayMap({
       <DeckRouteOverlay layers={subwayDeckLayers} />
       {selectedLineNumbers.length > 0 && layerVisibility.isTrainLayerVisible && (
         <Suspense fallback={null}>
-          <SubwayFleetOverview selectedLines={selectedLineNumbers} />
+          <SubwayFleetOverview selectedLines={selectedLineNumbers} onLine2Focus={setRequestedTrain} />
         </Suspense>
       )}
       {selectedLineNumbers.includes(2) && layerVisibility.isTrainLayerVisible && (
-        <Line2Service zoom={zoom} />
+        <Line2Service zoom={zoom} requestedTrain={requestedTrain} />
       )}
     </Map>
   );

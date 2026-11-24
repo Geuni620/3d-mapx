@@ -26,7 +26,7 @@ const labels = { accelerating: "가속", cruising: "정속", braking: "감속", 
 const directionName = (train: ScheduledTrain) =>
   train.direction === "inner-loop" ? "내선" : "외선";
 
-export function Line2Service({ zoom }: { zoom: number }) {
+export function Line2Service({ zoom, requestedTrain }: { zoom: number; requestedTrain: { id: string } | null }) {
   const { current: mapRef } = useMap();
   const [frozen, setFrozen] = useState<number | null>(() =>
     matchMedia("(prefers-reduced-motion: reduce)").matches ? trainFrameTimestamp() : null,
@@ -37,6 +37,11 @@ export function Line2Service({ zoom }: { zoom: number }) {
   const overviewSurface = useRef<HTMLDivElement>(null);
   const speed = useRef<HTMLOutputElement>(null);
   const selected = fleet.find((t) => t.id === selectedId);
+  useEffect(() => {
+    if (!requestedTrain) return;
+    select(requestedTrain.id);
+    setDepot(null);
+  }, [requestedTrain]);
   useEffect(() => {
     const query = matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => setFrozen(query.matches ? trainFrameTimestamp() : null);
@@ -196,7 +201,6 @@ export function Line2Service({ zoom }: { zoom: number }) {
           <Line2FleetOverview
             trains={fleet}
             selectedId={selected?.id ?? null}
-            onInspect={inspect}
             frozenTimestamp={frozen}
           />
         </div>
