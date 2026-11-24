@@ -215,24 +215,14 @@ export function Line2Service({ zoom, requestedTrain, frozen }: {
           </button>
         </Marker>
       ))}
-      <div className="line2-service-panel">
-        <div className="line2-service-status">
-          <a
-            href="https://www.data.go.kr/data/15098251/fileData.do"
-            target="_blank"
-            rel="noreferrer"
-          >
-            시간표 기준 추정
-          </a>
-          <a href={`${import.meta.env.BASE_URL}rolling-stock/credits.txt`} target="_blank" rel="noreferrer">
-            차량 에셋
-          </a>
-          <span>
-            {fleet.length
-              ? `내선 ${fleet.length - outer} · 외선 ${outer}편성`
-              : "현재 본선 운행 없음"}
+      <section className="line2-service-panel" aria-label="2호선 본선">
+        <header className="line2-service-header">
+          <h2>2호선 본선</h2>
+          <span className="line2-service-counts">{fleet.length
+            ? <>내선 <b>{fleet.length - outer}</b> · 외선 <b>{outer}</b>편성</>
+            : "현재 운행 없음"}
           </span>
-        </div>
+        </header>
         <div className="line2-service-actions">
           <select
             aria-label="시간표 열차 선택"
@@ -257,7 +247,7 @@ export function Line2Service({ zoom, requestedTrain, frozen }: {
             ))}
           </select>
           {selected && (
-            <button type="button" onClick={() => inspect(selected)}>
+            <button type="button" className="line2-service-focus" onClick={() => inspect(selected)}>
               열차 위치
             </button>
           )}
@@ -266,7 +256,15 @@ export function Line2Service({ zoom, requestedTrain, frozen }: {
           </button>
         </div>
         {selected && <output ref={speed} aria-label="선택 열차의 추정 속도" aria-live="off" />}
-      </div>
+        <footer className="line2-service-sources">
+          <a href="https://www.data.go.kr/data/15098251/fileData.do" target="_blank" rel="noreferrer">
+            시간표 기준 추정
+          </a>
+          <a href={`${import.meta.env.BASE_URL}rolling-stock/credits.txt`} target="_blank" rel="noreferrer">
+            차량 에셋
+          </a>
+        </footer>
+      </section>
     </>
   );
 }
