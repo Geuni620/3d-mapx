@@ -12,12 +12,20 @@ const viewport = { width: 400, height: 300 };
 describe("지도 2D 열차 아이콘", () => {
   it("줌과 호선에 상관없이 10량 편성은 같은 크기다", () => {
     const fromProjection = (count: number, scale: number) => sampleOverviewTrainIcon(
-      sampler, 400, count, ([lng]) => ({ x: 40 + (lng - 126.97) * scale, y: 120 }), viewport,
+      sampler, 400, count, ([lng]) => ({ x: 40 + (lng - 126.97) * scale, y: 120 }), { ...viewport, width: 800 },
     );
     expect(fromProjection(LINE_2_MAIN_CAR_COUNT, 10_000)?.bodyLength).toBe(24);
     expect(fromProjection(10, 15_000)?.bodyLength).toBe(24);
     expect([4, 6, 8, 10].map(count => fromProjection(count, 10_000)?.bodyLength))
       .toEqual([12, 16, 20, 24]);
+  });
+
+  it("560px 이하에서 축소 기호를 줄인다", () => {
+    const project = ([lng]: [number, number]) => ({ x: 40 + (lng - 126.97) * 10_000, y: 120 });
+    const desktop = sampleOverviewTrainIcon(sampler, 400, 10, project, { ...viewport, width: 561 })!;
+    const mobile = sampleOverviewTrainIcon(sampler, 400, 10, project, { ...viewport, width: 560 })!;
+    expect(mobile.bodyLength).toBeCloseTo(desktop.bodyLength * .72);
+    expect(mobile.bodyWidth).toBeCloseTo(desktop.bodyWidth * .72);
   });
 
   it("3D가 나타나기 시작할 때 2D 차체 길이가 투영된 차량 편성과 일치한다", () => {

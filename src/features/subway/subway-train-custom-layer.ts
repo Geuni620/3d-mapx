@@ -13,7 +13,7 @@ import {
   WebGLRenderer,
 } from "three";
 import type { ScheduledTrain } from "./line-2-timetable";
-import { detailBlend, trainFrameTimestamp } from "./line-2-main-simulation";
+import { detailBlend } from "./line-2-main-simulation";
 import { SUBWAY_TRAIN_LAYER_ID } from "./subway-layer-ids";
 import { getPlatformSide } from "./line-2-platform-side";
 import { getDoorCycle } from "./line-2-door-cycle";
@@ -39,12 +39,16 @@ export interface TrainLayerContent {
 }
 
 interface SubwayTrainCustomLayerOptions {
+  now: () => number;
+  pulse: boolean;
   getLine2: (timestamp: number) => { trains: readonly ScheduledTrain[]; timestamp: number } | null;
   createContent: (scene: Scene, map: MapLibreMap) => TrainLayerContent;
 }
 
 // 열차 모형과 이동 시뮬레이션을 MapLibre가 그릴 수 있는 Three.js 레이어로 묶는다.
 export function createSubwayTrainCustomLayer({
+  now,
+  pulse,
   getLine2,
   createContent,
 }: SubwayTrainCustomLayerOptions): CustomLayerInterface {
@@ -87,7 +91,7 @@ export function createSubwayTrainCustomLayer({
       document.hidden
     )
       return;
-    const timestamp = trainFrameTimestamp();
+    const timestamp = now();
     // 모든 편성을 한 장면에서 그려 교차하는 열차의 가림 순서를 깊이로 결정한다.
     const fleetVisible = content?.update(timestamp, origin, { south, north, west, east }) ?? false;
     const line2Visible = updateLine2(getLine2(timestamp), origin);
@@ -211,10 +215,10 @@ export function createSubwayTrainCustomLayer({
     },
     render(_gl, { defaultProjectionData }) {
       if (!map || !renderer) return;
-      detailOpacity = detailBlend(map.getZoom());
+      detailOpacity = detailBlend(map.getZoom(), pulse);
       renderer.domElement.style.opacity = String(detailOpacity);
       if (!detailOpacity) {
-        if (prototype && !getLine2(trainFrameTimestamp())) releaseLine2();
+        if (prototype && !getLine2(now())) releaseLine2();
         pause();
         return;
       }

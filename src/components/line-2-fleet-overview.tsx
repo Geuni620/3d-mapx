@@ -1,6 +1,6 @@
+import { useTrainClock } from "../features/night-pulse/train-clock";
 import { useEffect, useRef } from "react";
 import { useMap } from "react-map-gl/maplibre";
-import { trainFrameTimestamp } from "../features/subway/line-2-main-simulation";
 import { createSubwayScreenProjector } from "../features/subway/subway-screen-projection";
 import type { ScheduledTrain } from "../features/subway/line-2-timetable";
 import {
@@ -42,6 +42,7 @@ function drawNumber(context: CanvasRenderingContext2D, head: Pixel, train: Sched
 }
 
 export function Line2FleetOverview({ trains, selectedId, frozenTimestamp }: Props) {
+  const now = useTrainClock();
   const { current: mapRef } = useMap();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const state = useRef({ trains, selectedId });
@@ -63,7 +64,7 @@ export function Line2FleetOverview({ trains, selectedId, frozenTimestamp }: Prop
     const lastDwell = new WeakMap<ScheduledTrain, number>();
     const project = createSubwayScreenProjector(map);
     const draw = () => {
-      const timestamp = frozenTimestamp ?? trainFrameTimestamp();
+      const timestamp = frozenTimestamp ?? now();
       const zoom = map.getZoom();
       context.clearRect(0, 0, viewport.width, viewport.height);
       let selection: VisibleTrain | undefined;
@@ -114,7 +115,7 @@ export function Line2FleetOverview({ trains, selectedId, frozenTimestamp }: Prop
       map.off("resize", resize);
       map.off("move", draw);
     };
-  }, [mapRef, frozenTimestamp]);
+  }, [mapRef, frozenTimestamp, now]);
 
   return <canvas ref={canvasRef} aria-hidden="true" data-testid="line-2-fleet-overview"
     style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />;

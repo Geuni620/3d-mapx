@@ -36,6 +36,7 @@ export function sampleOverviewTrainIcon(
   viewport: Viewport,
   zoom = 13,
   coordinate = sampler.sample(frontDistanceMeters).coordinate,
+  { physical = false }: { physical?: boolean } = {},
 ): OverviewTrainIcon | undefined {
   const heightAt = sampler.elevationAt;
   const projectAt = (distance: number) => project(sampler.sample(distance).coordinate, heightAt?.(distance));
@@ -50,12 +51,15 @@ export function sampleOverviewTrainIcon(
   const ahead = projectAt(frontDistanceMeters + 10);
   const tangent = Math.atan2(ahead.y - behind.y, ahead.x - behind.x);
   let angle = tangent;
-  let tail = carCount * CAR_PIXELS;
-  let frontOverhang = CAB_PIXELS;
-  let bodyWidth = BODY_WIDTH;
+  const compactScale = viewport.width <= 560 ? .72 : 1;
+  const carPixels = CAR_PIXELS * compactScale;
+  const cabPixels = CAB_PIXELS * compactScale;
+  let tail = carCount * carPixels;
+  let frontOverhang = cabPixels;
+  let bodyWidth = BODY_WIDTH * compactScale;
   let cars: CarSegment[] | undefined;
-  if (zoom > SIZE_BLEND_START) {
-    const t = Math.min(1, (zoom - SIZE_BLEND_START) / (DETAIL_START - SIZE_BLEND_START));
+  if (physical || zoom > SIZE_BLEND_START) {
+    const t = physical ? 1 : Math.min(1, (zoom - SIZE_BLEND_START) / (DETAIL_START - SIZE_BLEND_START));
     const blend = t * t * (3 - 2 * t);
     const nose = projectAt(frontDistanceMeters + CAR_HALF_METERS);
     const end = projectAt(
@@ -80,7 +84,7 @@ export function sampleOverviewTrainIcon(
       ));
       bodyWidth += blend * (width - bodyWidth);
       // 3D와 같은 차량 피치를 따라 각 차량의 양끝을 별도로 투영한다.
-      const compactPitch = (carCount * CAR_PIXELS + CAB_PIXELS) / carCount;
+      const compactPitch = (carCount * carPixels + cabPixels) / carCount;
       const cos = Math.cos(tangent);
       const sin = Math.sin(tangent);
       const point = (distance: number, offset: number) => {
@@ -93,8 +97,8 @@ export function sampleOverviewTrainIcon(
       for (let i = 0; i < carCount; i++) {
         const center = frontDistanceMeters - i * SUBWAY_TRAIN_CAR_SPACING_METERS;
         cars.push({
-          front: point(center + CAR_HALF_METERS, CAB_PIXELS - i * compactPitch),
-          rear: point(center - CAR_HALF_METERS, CAB_PIXELS - (i + 1) * compactPitch),
+          front: point(center + CAR_HALF_METERS, cabPixels - i * compactPitch),
+          rear: point(center - CAR_HALF_METERS, cabPixels - (i + 1) * compactPitch),
         });
       }
     }

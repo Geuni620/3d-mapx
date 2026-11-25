@@ -1,8 +1,8 @@
+import { useTrainClock } from "../features/night-pulse/train-clock";
 import { useEffect, useState } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import type { MapMouseEvent } from "maplibre-gl";
 import { getScheduledFleet } from "../features/subway/line-2-timetable";
-import { trainFrameTimestamp } from "../features/subway/line-2-main-simulation";
 import {
   getActiveSubwayTrips, getSubwayServiceSecond, getSubwayTripJourney, sampleSubwayTrip,
 } from "../features/subway/subway-timetable";
@@ -55,6 +55,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus, frozenLine2 }: {
   onLine2Focus: (train: { id: string }) => void;
   frozenLine2: number | null;
 }) {
+  const now = useTrainClock();
   const { current: mapRef } = useMap();
   const [hover, setHover] = useState<HoveredTrain | null>(null);
 
@@ -72,7 +73,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus, frozenLine2 }: {
 
     const update = (): HoveredTrain | null | undefined => {
       if (!pointer || map.isMoving()) return;
-      const timestamp = trainFrameTimestamp();
+      const timestamp = now();
       const second = Math.floor(timestamp / 1000);
       if (lastSecond !== second) {
         lastSecond = second;
@@ -168,7 +169,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus, frozenLine2 }: {
       map.off("moveend", update);
       leave();
     };
-  }, [mapRef, onLine2Focus, selectedLines, frozenLine2]);
+  }, [mapRef, onLine2Focus, selectedLines, frozenLine2, now]);
 
   if (!hover) return null;
   const { icon, tooltip, line, origin, destination, headsign } = hover;

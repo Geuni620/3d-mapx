@@ -113,3 +113,21 @@
 }
 
 .subway-map[data-map-theme="light"] .line2-depot b { background: #fcfaf0ee; color: #43381d; }
+
+.subway-theme-switch button:disabled { opacity: .46; cursor: default; }
+
+.subway-pulse-toggle {
+  padding-inline: 8px;
+  min-height: 34px;
+  border-radius: 8px;
+  color: var(--map-control-muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.subway-pulse-toggle[aria-pressed="true"] {
+  background: var(--map-control-selected);
+  color: var(--map-control-accent);
+}
+
+.subway-pulse-toggle:focus-visible { outline: 2px solid var(--map-control-accent); }
