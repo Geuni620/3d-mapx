@@ -124,14 +124,18 @@ export function SeoulSubwayExplorer() {
           onZoomChange={setZoom}
         />
       </TrainClock.Provider>
-      <div className="subway-theme-switch" role="group" aria-label="지도 테마">
-        {themeOptions.map(({ value, label }) =>
-          <button key={value} type="button" aria-pressed={preference === value}
-            title={value === "auto" ? "서울 일출·일몰 기준" : undefined}
-            onClick={() => selectTheme(value)}>{label}</button>,
+      <div className="subway-theme-switch">
+        {preference === "auto" && (
+          <span className="subway-theme-status" role="status">서울 {theme === "light" ? "낮" : "밤"}</span>
         )}
-        {preference === "auto" && <span role="status">서울 {theme === "light" ? "낮" : "밤"}</span>}
-        <button type="button" disabled={theme === "light"} aria-pressed={pulse}
+        <div className="subway-theme-options" role="group" aria-label="지도 테마">
+          {themeOptions.map(({ value, label }) => (
+            <button key={value} type="button" data-mode={value} aria-pressed={preference === value}
+              title={value === "auto" ? "서울 일출·일몰 기준" : undefined}
+              onClick={() => selectTheme(value)}>{label}</button>
+          ))}
+        </div>
+        <button type="button" className="subway-pulse-toggle" disabled={theme === "light"} aria-pressed={pulse}
           title={theme === "light" ? "다크 테마에서 사용" : undefined}
           onClick={togglePulse}>야간 맥박</button>
       </div>

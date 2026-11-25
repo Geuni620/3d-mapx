@@ -1,12 +1,13 @@
 import { MercatorCoordinate, type Map as MapLibreMap } from "maplibre-gl";
 import {
-  BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
+  BoxGeometry, Color, DynamicDrawUsage, Euler, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
   MeshStandardMaterial, Vector3, type Scene,
 } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { SubwayLineNumber } from "./subway-constants";
 import { getActiveSubwayTrips, getSubwayServiceSecond, sampleSubwayTrip } from "./subway-timetable";
 import { sampleSubwayRouteChordPose } from "./subway-route-sampler";
+import { getSubwayCarElevation } from "./subway-elevation";
 import { SUBWAY_TRAIN_BOGIE_OFFSET_METERS, SUBWAY_TRAIN_CAR_SPACING_METERS } from "./subway-train-dimensions";
 import { createRunningGear } from "./subway-train-equipment";
 import { getDoorCycle } from "./line-2-door-cycle";
@@ -40,6 +41,7 @@ export function createSubwayRollingStock(
   const requested = new Set<SubwayLineNumber>();
   const loader = new GLTFLoader();
   const matrix = new Matrix4();
+  const rotation = new Euler(0, 0, 0, "ZXY");
   const attachment = new Matrix4();
   const translation = new Matrix4();
   const scale = new Vector3();
@@ -157,10 +159,13 @@ export function createSubwayRollingStock(
           const distance = train.frontDistanceMeters - i * SUBWAY_TRAIN_CAR_SPACING_METERS;
           if (distance < 0) break;
           const pose = sampleSubwayRouteChordPose(train.sampler, distance, SUBWAY_TRAIN_BOGIE_OFFSET_METERS);
+          const { altitude, pitch } = getSubwayCarElevation(train.sampler, distance);
           const [lng, lat] = pose.coordinate;
-          const point = MercatorCoordinate.fromLngLat({ lng, lat });
-          const angle = -pose.headingRadians + (i === train.carCount - 1 ? Math.PI : 0);
-          matrix.makeRotationZ(angle).scale(scale.setScalar(point.meterInMercatorCoordinateUnits()))
+          const point = MercatorCoordinate.fromLngLat({ lng, lat }, altitude);
+          const tail = i === train.carCount - 1;
+          const angle = -pose.headingRadians + (tail ? Math.PI : 0);
+          matrix.makeRotationFromEuler(rotation.set(tail ? -pitch : pitch, 0, angle))
+            .scale(scale.setScalar(point.meterInMercatorCoordinateUnits()))
             .setPosition(point.x - origin.x, origin.y - point.y, point.z - origin.z);
           bogies = append(bogies, matrix);
           matrix.multiply(upright);

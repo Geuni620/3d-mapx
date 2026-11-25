@@ -1,16 +1,19 @@
 import { useEffect, useRef } from "react";
+import { MercatorCoordinate } from "maplibre-gl";
 import { useMap } from "react-map-gl/maplibre";
 import { DANGSAN_ORIGIN } from "../dangsan/bridge-location";
 import { detailBlend } from "../subway/line-2-main-simulation";
 import { getScheduledFleet, type ScheduledTrain } from "../subway/line-2-timetable";
-import { SEOUL_SUBWAY_OSM_NETWORK, type SubwayCoordinate } from "../subway/osm-subway-network";
+import type { SubwayCoordinate } from "../subway/osm-subway-network";
 import { SUBWAY_LINE_COLORS, type SubwayLineNumber } from "../subway/subway-constants";
+import type { createSubwayRoutePaths } from "../subway/subway-paths";
+import { createSubwayScreenProjector } from "../subway/subway-screen-projection";
 import type { SubwayStationMapPoint } from "../subway/subway-geojson";
 import { sampleOverviewTrainIcon, type Pixel, type Viewport } from "../subway/subway-overview-icon";
 import type { SubwayRouteSampler } from "../subway/subway-route-sampler";
 import { getActiveSubwayTrips, getSubwayServiceSecond, sampleSubwayTrip, type TimetableTrip } from "../subway/subway-timetable";
 import { LINE_2_MAIN_CAR_COUNT } from "../subway/subway-train-model";
-import { createPulseSegmentClipper } from "./clip-pulse-segment";
+import { createPulseSegmentClipper, type PulseClipPoint } from "./clip-pulse-segment";
 import { useTrainClock } from "./train-clock";
 
 const TRAIL_SECONDS = 150;
@@ -24,6 +27,8 @@ const inScreen = (p: Pixel, view: Viewport, pad = 48) =>
 type Props = {
   lines: readonly SubwayLineNumber[];
   stations: SubwayStationMapPoint[];
+  routes: ReturnType<typeof createSubwayRoutePaths>;
+  frozenLine2: number | null;
   showRoutes: boolean;
   showStations: boolean;
   showTrains: boolean;
@@ -67,9 +72,9 @@ function arc(ctx: CanvasRenderingContext2D, p: Pixel, radius: number, start = 0,
   ctx.arc(p.x, p.y, radius, start, end);
 }
 
-type Trail = { line: SubwayLineNumber; points: SubwayCoordinate[]; epoch: number; serviceDay: number };
+type Trail = { line: SubwayLineNumber; points: MercatorCoordinate[]; epoch: number; serviceDay: number };
 
-export function NightPulseLayer({ lines, stations, showRoutes, showStations, showTrains }: Props) {
+export function NightPulseLayer({ lines, stations, routes, frozenLine2, showRoutes, showStations, showTrains }: Props) {
   const { current: mapRef } = useMap();
   const now = useTrainClock();
   const routeSurface = useRef<HTMLCanvasElement>(null);
@@ -83,21 +88,16 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
     const trains = trainSurface.current?.getContext("2d");
     if (!map || !route || !trails || !trains) return;
 
-    const routes = SEOUL_SUBWAY_OSM_NETWORK.routes.filter(r => lines.includes(r.lineNumber));
+    const routePoints = routes.map(({ lineNumber, elevatedPath }) => ({
+      lineNumber,
+      path: elevatedPath.map(([lng, lat, altitude]) => MercatorCoordinate.fromLngLat({ lng, lat }, altitude)),
+    }));
     const hubs = showStations ? groupHubs(stations) : [];
     const sprites = new Map(lines.map(line => [line, headSprite(SUBWAY_LINE_COLORS[line])]));
     const history = new Map<TimetableTrip | ScheduledTrain, Trail>();
     const reduced = matchMedia("(prefers-reduced-motion: reduce)");
     let viewport = { width: 0, height: 0 };
-    let bounds = map.getBounds();
-    const makeClipper = () => {
-      const pad = 48;
-      const { width, height } = viewport;
-      const corners: [number, number][] = [
-        [-pad, -pad], [width + pad, -pad], [width + pad, height + pad], [-pad, height + pad],
-      ];
-      return createPulseSegmentClipper(corners.map(p => map.unproject(p).toArray()));
-    };
+    let matrix: ArrayLike<number>;
     let clipSegment: ReturnType<typeof createPulseSegmentClipper>;
     let frame = 0;
     let dirty = true;
@@ -111,13 +111,25 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
     const placed: { x: number; y: number; width: number; height: number }[] = [];
     const popped = new Set<string>();
 
-    const project = (coordinate: SubwayCoordinate) => map.project(coordinate);
-    const clipped = (coordinate: SubwayCoordinate) => {
-      const [lng, lat] = coordinate;
-      if (lng < bounds.getWest() || lng > bounds.getEast() || lat < bounds.getSouth() || lat > bounds.getNorth()) return;
-      const point = project(coordinate);
+    const project = createSubwayScreenProjector(map);
+    const projectToClip = ({ x, y, z }: MercatorCoordinate): PulseClipPoint => [
+      matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12],
+      matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13],
+      matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15],
+    ];
+    const toScreen = ([x, y, w]: PulseClipPoint) => ({
+      x: (1 + x / w) * viewport.width / 2,
+      y: (1 - y / w) * viewport.height / 2,
+    });
+    const visiblePoint = (projected: PulseClipPoint) => {
+      if (projected[2] <= 0) return;
+      const point = toScreen(projected);
       if (inScreen(point, viewport)) return point;
     };
+    const clipped = (coordinate: SubwayCoordinate) =>
+      visiblePoint(projectToClip(MercatorCoordinate.fromLngLat(coordinate)));
+    const trackPoint = (sampler: SubwayRouteSampler, distance: number, coordinate = sampler.sample(distance).coordinate) =>
+      MercatorCoordinate.fromLngLat(coordinate, sampler.elevationAt?.(distance) ?? 0);
 
     function label(ctx: CanvasRenderingContext2D, name: string, x: number, y: number, color: string) {
       ctx.font = "600 12px system-ui, sans-serif";
@@ -145,22 +157,23 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
       route!.clearRect(0, 0, viewport.width, viewport.height);
       const width = Math.min(4, Math.max(1, (zoom - 9.5) * .8));
       if (showRoutes) {
-        const paths = routes.map(({ lineNumber, pathSegments }) => {
+        const paths = routePoints.map(({ lineNumber, path: points }) => {
           const path = new Path2D();
-          for (const segment of pathSegments) {
-            let previousEnd: SubwayCoordinate | undefined;
-            for (let i = 1; i < segment.length; i++) {
-              const visible = clipSegment(segment[i - 1], segment[i]);
-              if (!visible) { previousEnd = undefined; continue; }
-              const [start, end] = visible;
-              if (start !== previousEnd) {
-                const p = project(start);
-                path.moveTo(p.x, p.y);
-              }
-              const p = project(end);
-              path.lineTo(p.x, p.y);
-              previousEnd = end;
+          let previous = projectToClip(points[0]);
+          let previousEnd: PulseClipPoint | undefined;
+          for (let i = 1; i < points.length; i++) {
+            const next = projectToClip(points[i]);
+            const visible = clipSegment(previous, next);
+            previous = next;
+            if (!visible) { previousEnd = undefined; continue; }
+            const [start, end] = visible;
+            if (start !== previousEnd) {
+              const p = toScreen(start);
+              path.moveTo(p.x, p.y);
             }
+            const p = toScreen(end);
+            path.lineTo(p.x, p.y);
+            previousEnd = end;
           }
           return { path, color: SUBWAY_LINE_COLORS[lineNumber] };
         });
@@ -210,7 +223,7 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
 
     function refreshTrails(epoch: number, time: number, interval: number) {
       const serviceDay = time - getSubwayServiceSecond(time) * 1000;
-      const remember = (key: TimetableTrip | ScheduledTrain, line: SubwayLineNumber, sample: (ago: number) => SubwayCoordinate | undefined) => {
+      const remember = (key: TimetableTrip | ScheduledTrain, line: SubwayLineNumber, sample: (ago: number) => MercatorCoordinate | undefined) => {
         let trail = history.get(key);
         if (!trail) { trail = { line, points: [], epoch: -1, serviceDay: 0 }; history.set(key, trail); }
         if (trail.epoch === epoch && trail.serviceDay === serviceDay) return;
@@ -224,11 +237,14 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
         }
       };
       const seconds = (time - serviceDay) / 1000;
-      for (const trip of trips) remember(trip, trip[0], ago => sampleSubwayTrip(trip, seconds - ago)?.front);
+      for (const trip of trips) remember(trip, trip[0], ago => {
+        const pose = sampleSubwayTrip(trip, seconds - ago);
+        return pose && trackPoint(pose.sampler, pose.frontDistanceMeters, pose.front);
+      });
       for (const train of main) remember(train, 2, ago => {
-        const sampleTime = time - ago * 1000;
+        const sampleTime = (frozenLine2 ?? time) - ago * 1000;
         if (sampleTime < train.departureMs) return;
-        return train.sampler.sample(train.getMotion(sampleTime).frontDistanceMeters).coordinate;
+        return trackPoint(train.sampler, train.getMotion(sampleTime).frontDistanceMeters);
       });
       for (const [key, trail] of history) if (trail.epoch !== epoch || trail.serviceDay !== serviceDay) history.delete(key);
     }
@@ -238,12 +254,15 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
       const batches = new Map(lines.map(line => [line, Array.from({ length: TRAIL_BANDS }, () => new Path2D())]));
       for (const { line, points } of history.values()) {
         const paths = batches.get(line);
-        if (!paths) continue;
+        if (!paths || points.length < 2) continue;
+        let previous = projectToClip(points[0]);
         for (let i = 1; i < points.length; i++) {
-          const visible = clipSegment(points[i - 1], points[i]);
+          const next = projectToClip(points[i]);
+          const visible = clipSegment(previous, next);
+          previous = next;
           if (!visible) continue;
-          const start = project(visible[0]);
-          const end = project(visible[1]);
+          const start = toScreen(visible[0]);
+          const end = toScreen(visible[1]);
           const band = Math.min(TRAIL_BANDS - 1, Math.floor(i * interval * TRAIL_BANDS / TRAIL_SECONDS));
           paths[band].moveTo(start.x, start.y);
           paths[band].lineTo(end.x, end.y);
@@ -304,8 +323,8 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
         trains.canvas.style.opacity = String(showTrains ? 1 - .25 * detail : 0);
       }
       if (dirty) {
-        bounds = map.getBounds();
-        clipSegment = makeClipper();
+        matrix = map.transform.getProjectionDataForCustomLayer(false).mainMatrix;
+        clipSegment = createPulseSegmentClipper(viewport.width, viewport.height);
         drawRoutes(zoom);
         trailDirty = true;
         dirty = false;
@@ -316,7 +335,7 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
       if (second !== lastSecond) {
         lastSecond = second;
         trips = getActiveSubwayTrips(time, lines);
-        main = lines.includes(2) ? getScheduledFleet(time) : [];
+        main = lines.includes(2) ? getScheduledFleet(frozenLine2 ?? time) : [];
       }
       const interval = zoom < 10 ? TRAIL_STEP * 2 : TRAIL_STEP;
       const epoch = Math.floor(time / (interval * 1000)) * interval * 1000;
@@ -334,15 +353,16 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
         key: TimetableTrip | ScheduledTrain, line: SubwayLineNumber, coord: SubwayCoordinate,
         sampler: SubwayRouteSampler, distance: number, cars: number, speed: number, elapsed = -1, dwell = 0, name?: string,
       ) => {
-        const head = clipped(coord);
+        const projected = projectToClip(trackPoint(sampler, distance, coord));
+        const head = visiblePoint(projected);
         if (!head) return;
         const color = SUBWAY_LINE_COLORS[line];
         const intensity = .55 + .45 * Math.min(1, speed / 20);
         const radius = Math.min(8, Math.max(3.1, (zoom - 9.5) * 1.25)) * (mobile ? .75 : 1);
         const first = history.get(key)?.points[0];
-        const neck = first && clipSegment(first, coord);
+        const neck = first && clipSegment(projectToClip(first), projected);
         if (neck) {
-          const start = project(neck[0]);
+          const start = toScreen(neck[0]);
           trains.strokeStyle = color;
           trains.lineWidth = width * 1.1;
           trains.beginPath();
@@ -397,12 +417,13 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
           pose.speedMetersPerSecond, pose.dwelling ? pose.dwellElapsedSeconds : -1, pose.dwellSeconds);
       }
       for (const train of main) {
-        const motion = train.getMotion(time);
+        const line2Time = frozenLine2 ?? time;
+        const motion = train.getMotion(line2Time);
         const coordinate = train.sampler.sample(motion.frontDistanceMeters).coordinate;
-        const stop = motion.phase === "dwelling" ? train.getStopEvent(time) : null;
+        const stop = motion.phase === "dwelling" ? train.getStopEvent(line2Time) : null;
         const arrival = stop?.arrivalMs;
         drawTrain(train, 2, coordinate, train.sampler, motion.frontDistanceMeters, LINE_2_MAIN_CAR_COUNT,
-          motion.speedMetersPerSecond, arrival != null ? (time - arrival) / 1000 : -1,
+          motion.speedMetersPerSecond, arrival != null ? (line2Time - arrival) / 1000 : -1,
           stop && arrival != null ? (stop.departureMs - arrival) / 1000 : 0, stop?.station);
       }
     };
@@ -416,7 +437,7 @@ export function NightPulseLayer({ lines, stations, showRoutes, showStations, sho
       map.off("resize", resize);
       map.off("move", move);
     };
-  }, [mapRef, now, lines, stations, showRoutes, showStations, showTrains]);
+  }, [mapRef, now, lines, stations, routes, frozenLine2, showRoutes, showStations, showTrains]);
 
   return <>
     <canvas ref={routeSurface} className="night-pulse-surface night-pulse-routes" aria-hidden="true" />

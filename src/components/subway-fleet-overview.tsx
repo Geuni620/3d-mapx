@@ -8,42 +8,53 @@ import {
   sampleSubwayTrip,
 } from "../features/subway/subway-timetable";
 import { DETAIL_START, PULSE_DETAIL_START, detailBlend } from "../features/subway/line-2-main-simulation";
-import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-ids";
+import { SUBWAY_STATION_LABEL_LAYER_ID, SUBWAY_TRAIN_LAYER_ID } from "../features/subway/subway-layer-ids";
 import { createSubwayTrainCustomLayer } from "../features/subway/subway-train-custom-layer";
+import { getScheduledFleet } from "../features/subway/line-2-timetable";
 import { createSubwayRollingStock } from "../features/subway/subway-rolling-stock";
-import { drawOverviewTrainIcon, sampleOverviewTrainIcon, type Project, type Viewport } from "../features/subway/subway-overview-icon";
+import { drawOverviewTrainIcon, sampleOverviewTrainIcon, type Viewport } from "../features/subway/subway-overview-icon";
+import { createSubwayScreenProjector } from "../features/subway/subway-screen-projection";
 import { SubwayTrainHover } from "./subway-train-hover";
 
-const DETAIL_LAYER_ID = "subway-fleet-detail";
-
-export default function SubwayFleetOverview({ selectedLines, onLine2Focus, pulse }: {
-  pulse: boolean;
+export default function SubwayFleetOverview({ selectedLines, onLine2Focus, frozenLine2, pulse }: {
   selectedLines: readonly SubwayLineNumber[];
   onLine2Focus: (train: { id: string }) => void;
+  frozenLine2: number | null;
+  pulse: boolean;
 }) {
-  const clock = useTrainClock();
+  const now = useTrainClock();
   const { current: mapRef } = useMap();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lines = useRef(selectedLines);
+  const line2Time = useRef(frozenLine2);
   const ready = useRef(new Set<SubwayLineNumber>());
 
   useEffect(() => {
     lines.current = selectedLines;
-  }, [selectedLines]);
+    line2Time.current = frozenLine2;
+    mapRef?.getMap().triggerRepaint();
+  }, [selectedLines, frozenLine2, mapRef]);
 
   useEffect(() => {
     const map = mapRef?.getMap();
     if (!map) return;
     const attach = () => {
-      if (map.getZoom() < (pulse ? PULSE_DETAIL_START : DETAIL_START) || map.getLayer(DETAIL_LAYER_ID) ||
+      if (map.getZoom() < (pulse ? PULSE_DETAIL_START : DETAIL_START) || map.getLayer(SUBWAY_TRAIN_LAYER_ID) ||
           !map.getLayer(SUBWAY_STATION_LABEL_LAYER_ID)) return;
-      map.addLayer(createSubwayTrainCustomLayer({
-        id: DETAIL_LAYER_ID,
-        now: clock, pulse,
-        frozenTimestamp: null,
-        createContent: (scene, instance) =>
-          createSubwayRollingStock(scene, instance, () => lines.current, ready.current),
-      }), SUBWAY_STATION_LABEL_LAYER_ID);
+      try {
+        map.addLayer(createSubwayTrainCustomLayer({
+          now, pulse,
+          getLine2: (frameTime) => {
+            if (!lines.current.includes(2)) return null;
+            const timestamp = line2Time.current ?? frameTime;
+            return { trains: getScheduledFleet(timestamp), timestamp };
+          },
+          createContent: (scene, instance) =>
+            createSubwayRollingStock(scene, instance, () => lines.current, ready.current),
+        }), SUBWAY_STATION_LABEL_LAYER_ID);
+      } catch (error) {
+        console.error("Three.js 열차 레이어를 초기화하지 못했습니다.", error);
+      }
     };
     map.on("zoom", attach);
     map.on("styledata", attach);
@@ -51,9 +62,9 @@ export default function SubwayFleetOverview({ selectedLines, onLine2Focus, pulse
     return () => {
       map.off("zoom", attach);
       map.off("styledata", attach);
-      if (map.getLayer(DETAIL_LAYER_ID)) map.removeLayer(DETAIL_LAYER_ID);
+      if (map.getLayer(SUBWAY_TRAIN_LAYER_ID)) map.removeLayer(SUBWAY_TRAIN_LAYER_ID);
     };
-  }, [mapRef, clock, pulse]);
+  }, [mapRef, now, pulse]);
 
   useEffect(() => {
     const map = mapRef?.getMap();
@@ -63,7 +74,7 @@ export default function SubwayFleetOverview({ selectedLines, onLine2Focus, pulse
 
     let frame = 0;
     let viewport: Viewport = { width: 0, height: 0 };
-    const project: Project = coordinate => map.project(coordinate);
+    const project = createSubwayScreenProjector(map);
     let lastSecond = -1;
     let lastLines: readonly SubwayLineNumber[] = [];
     let trips: ReturnType<typeof getActiveSubwayTrips> = [];
@@ -75,7 +86,7 @@ export default function SubwayFleetOverview({ selectedLines, onLine2Focus, pulse
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
     };
     const draw = () => {
-      const timestamp = clock();
+      const timestamp = now();
       const second = Math.floor(timestamp / 1000);
       if (second !== lastSecond || lastLines !== lines.current) {
         lastSecond = second;
@@ -111,11 +122,11 @@ export default function SubwayFleetOverview({ selectedLines, onLine2Focus, pulse
       cancelAnimationFrame(frame);
       map.off("resize", resize);
     };
-  }, [mapRef, clock, pulse]);
+  }, [mapRef, now, pulse]);
 
   return <>
     {!pulse && <canvas ref={canvasRef} role="img" aria-label="시간표 기준 열차 위치"
       className="pointer-events-none absolute inset-0 z-2 h-full w-full" />}
-    <SubwayTrainHover selectedLines={selectedLines} onLine2Focus={onLine2Focus} />
+    <SubwayTrainHover selectedLines={selectedLines} onLine2Focus={onLine2Focus} frozenLine2={frozenLine2} />
   </>;
 }

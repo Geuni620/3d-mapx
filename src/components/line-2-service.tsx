@@ -4,14 +4,12 @@ import { LngLatBounds } from "maplibre-gl";
 import { Marker, useMap } from "react-map-gl/maplibre";
 import { SEOUL_SUBWAY_OSM_NETWORK } from "../features/subway/osm-subway-network";
 import { getScheduledFleet, type ScheduledTrain } from "../features/subway/line-2-timetable";
+import { createSubwayScreenProjector, subwayCameraOffset } from "../features/subway/subway-screen-projection";
 import {
   detailBlend,
-  DETAIL_START,
-  PULSE_DETAIL_START,
   DETAIL_END,
 } from "../features/subway/line-2-main-simulation";
 import { Line2FleetOverview } from "./line-2-fleet-overview";
-import { SubwayTrainLayer } from "./subway-train-layer";
 import "./line-2-service.css";
 
 const DEPOTS = [
@@ -27,12 +25,11 @@ const labels = { accelerating: "가속", cruising: "정속", braking: "감속", 
 const directionName = (train: ScheduledTrain) =>
   train.direction === "inner-loop" ? "내선" : "외선";
 
-export function Line2Service({ zoom, requestedTrain, pulse }: { zoom: number; pulse: boolean; requestedTrain: { id: string } | null }) {
+export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
+  pulse: boolean; zoom: number; requestedTrain: { id: string } | null; frozen: number | null;
+}) {
   const clock = useTrainClock();
   const { current: mapRef } = useMap();
-  const [frozen, setFrozen] = useState<number | null>(() =>
-    matchMedia("(prefers-reduced-motion: reduce)").matches ? clock() : null,
-  );
   const [fleet, setFleet] = useState(() => getScheduledFleet(frozen ?? clock()));
   const [selectedId, select] = useState<string | null>(null);
   const [depot, setDepot] = useState<string | null>(null);
@@ -44,12 +41,6 @@ export function Line2Service({ zoom, requestedTrain, pulse }: { zoom: number; pu
     select(requestedTrain.id);
     setDepot(null);
   }, [requestedTrain]);
-  useEffect(() => {
-    const query = matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setFrozen(query.matches ? clock() : null);
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, [clock]);
   useEffect(() => {
     const refresh = () => {
       const next = getScheduledFleet(frozen ?? clock());
@@ -115,8 +106,8 @@ export function Line2Service({ zoom, requestedTrain, pulse }: { zoom: number; pu
       select(train.id);
       setDepot(null);
       const now = frozen ?? clock();
-      const goal = train.getLeadPose(now).lead.coordinate;
-      const targetPixels = map.project(goal);
+      const goal = train.getLeadPose(now).lead;
+      const targetPixels = createSubwayScreenProjector(map)(goal.coordinate, train.sampler.elevationAt?.(goal.distanceMeters));
       const container = map.getContainer();
       const travel = Math.hypot(
         targetPixels.x - container.clientWidth / 2,
@@ -128,12 +119,12 @@ export function Line2Service({ zoom, requestedTrain, pulse }: { zoom: number; pu
           ? Math.min(3200, 720 + 260 * Math.abs(18.25 - map.getZoom()) + 160 * Math.min(5, screens))
           : 0;
       const { lead } = train.getLeadPose(frozen ?? clock() + duration);
+      const view = { zoom: 18.25, pitch: 55, bearing: map.getBearing() };
       // 방위를 유지한 채 선택 지점으로 접근해 같은 선로 위의 열차를 계속 읽게 한다.
       map.easeTo({
+        ...view,
         center: lead.coordinate,
-        zoom: 18.25,
-        pitch: 55,
-        bearing: map.getBearing(),
+        offset: subwayCameraOffset(map, lead.coordinate, train.sampler.elevationAt?.(lead.distanceMeters) ?? 0, view),
         duration,
         easing: (t) => t * t * t * (t * (6 * t - 15) + 10),
       });
@@ -207,12 +198,6 @@ export function Line2Service({ zoom, requestedTrain, pulse }: { zoom: number; pu
           />
         </div>
       )}
-      <SubwayTrainLayer
-        pulse={pulse}
-        isActive={zoom >= (pulse ? PULSE_DETAIL_START : DETAIL_START) || selectedId !== null}
-        trains={fleet}
-        frozenTimestamp={frozen}
-      />
       {!pulse && DEPOTS.map((d) => (
         <Marker key={d.name} longitude={d.longitude} latitude={d.latitude} anchor="center">
           <button
@@ -231,24 +216,14 @@ export function Line2Service({ zoom, requestedTrain, pulse }: { zoom: number; pu
           </button>
         </Marker>
       ))}
-      <div className="line2-service-panel">
-        <div className="line2-service-status">
-          <a
-            href="https://www.data.go.kr/data/15098251/fileData.do"
-            target="_blank"
-            rel="noreferrer"
-          >
-            시간표 기준 추정
-          </a>
-          <a href={`${import.meta.env.BASE_URL}rolling-stock/credits.txt`} target="_blank" rel="noreferrer">
-            차량 에셋
-          </a>
-          <span>
-            {fleet.length
-              ? `내선 ${fleet.length - outer} · 외선 ${outer}편성`
-              : "현재 본선 운행 없음"}
+      <section className="line2-service-panel" aria-label="2호선 본선">
+        <header className="line2-service-header">
+          <h2>2호선 본선</h2>
+          <span className="line2-service-counts">{fleet.length
+            ? <>내선 <b>{fleet.length - outer}</b> · 외선 <b>{outer}</b>편성</>
+            : "현재 운행 없음"}
           </span>
-        </div>
+        </header>
         <div className="line2-service-actions">
           <select
             aria-label="시간표 열차 선택"
@@ -273,7 +248,7 @@ export function Line2Service({ zoom, requestedTrain, pulse }: { zoom: number; pu
             ))}
           </select>
           {selected && (
-            <button type="button" onClick={() => inspect(selected)}>
+            <button type="button" className="line2-service-focus" onClick={() => inspect(selected)}>
               열차 위치
             </button>
           )}
@@ -282,7 +257,15 @@ export function Line2Service({ zoom, requestedTrain, pulse }: { zoom: number; pu
           </button>
         </div>
         {selected && <output ref={speed} aria-label="선택 열차의 추정 속도" aria-live="off" />}
-      </div>
+        <footer className="line2-service-sources">
+          <a href="https://www.data.go.kr/data/15098251/fileData.do" target="_blank" rel="noreferrer">
+            시간표 기준 추정
+          </a>
+          <a href={`${import.meta.env.BASE_URL}rolling-stock/credits.txt`} target="_blank" rel="noreferrer">
+            차량 에셋
+          </a>
+        </footer>
+      </section>
     </>
   );
 }
