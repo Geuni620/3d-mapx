@@ -3,7 +3,8 @@ import { getLine2ServiceDay, getSubwayServiceMidnight } from "./line-2-timetable
 import { createScheduledLeg } from "./line-2-train-simulation";
 import type { SubwayCoordinate } from "./osm-subway-network";
 import type { SubwayLineNumber } from "./subway-constants";
-import { createSubwayRouteSampler, type SubwayRouteSampler } from "./subway-route-sampler";
+import type { SubwayRouteSampler } from "./subway-route-sampler";
+import { createElevatedSubwayRoute } from "./subway-elevation";
 
 type ServiceDay = ReturnType<typeof getLine2ServiceDay>;
 export type TimetableTrip = [
@@ -56,7 +57,7 @@ export function sampleSubwayTrip(
       const [path, fromMeters] = timetable.legs[leg];
       let sampler = samplers.get(path);
       if (!sampler) {
-        sampler = createSubwayRouteSampler(timetable.paths[path], { closed: false });
+        sampler = createElevatedSubwayRoute(line, timetable.paths[path], false);
         if (!sampler) return undefined;
         samplers.set(path, sampler);
       }

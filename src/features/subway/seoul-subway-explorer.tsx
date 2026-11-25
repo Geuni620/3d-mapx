@@ -87,13 +87,17 @@ export function SeoulSubwayExplorer() {
         theme={theme}
         onZoomChange={setZoom}
       />
-      <div className="subway-theme-switch" role="group" aria-label="지도 테마">
-        {themeOptions.map(({ value, label }) =>
-          <button key={value} type="button" aria-pressed={preference === value}
-            title={value === "auto" ? "서울 일출·일몰 기준" : undefined}
-            onClick={() => selectTheme(value)}>{label}</button>,
+      <div className="subway-theme-switch">
+        {preference === "auto" && (
+          <span className="subway-theme-status" role="status">서울 {theme === "light" ? "낮" : "밤"}</span>
         )}
-        {preference === "auto" && <span role="status">서울 {theme === "light" ? "낮" : "밤"}</span>}
+        <div className="subway-theme-options" role="group" aria-label="지도 테마">
+          {themeOptions.map(({ value, label }) => (
+            <button key={value} type="button" data-mode={value} aria-pressed={preference === value}
+              title={value === "auto" ? "서울 일출·일몰 기준" : undefined}
+              onClick={() => selectTheme(value)}>{label}</button>
+          ))}
+        </div>
       </div>
       {debug && <SubwayLineInspector
         className="absolute left-4 top-4 z-10"

@@ -11,6 +11,7 @@ import {
 } from "../features/subway/subway-overview-icon";
 import { LINE_2_MAIN_CAR_COUNT } from "../features/subway/subway-train-model";
 import { focusSubwayTrain } from "../features/subway/subway-train-camera";
+import { createSubwayScreenProjector } from "../features/subway/subway-screen-projection";
 import { SUBWAY_LINE_COLORS, type SubwayLineNumber } from "../features/subway/subway-constants";
 import "./subway-train-hover.css";
 
@@ -49,9 +50,10 @@ function distanceToIcon(point: Pixel, icon: OverviewTrainIcon) {
   return nearest;
 }
 
-export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
+export function SubwayTrainHover({ selectedLines, onLine2Focus, frozenLine2 }: {
   selectedLines: readonly SubwayLineNumber[];
   onLine2Focus: (train: { id: string }) => void;
+  frozenLine2: number | null;
 }) {
   const { current: mapRef } = useMap();
   const [hover, setHover] = useState<HoveredTrain | null>(null);
@@ -61,13 +63,12 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
     if (!map) return;
     const canvas = map.getCanvas();
     const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-    let frozen = reduced.matches ? trainFrameTimestamp() : null;
     let pointer: Pixel | undefined;
     let frame = 0;
     let lastSecond = -1;
     let otherTrips: ReturnType<typeof getActiveSubwayTrips> = [];
     let line2Trains: ReturnType<typeof getScheduledFleet> = [];
-    const project = (coordinate: [number, number]) => map.project(coordinate);
+    const project = createSubwayScreenProjector(map);
 
     const update = (): HoveredTrain | null | undefined => {
       if (!pointer || map.isMoving()) return;
@@ -76,7 +77,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
       if (lastSecond !== second) {
         lastSecond = second;
         otherTrips = getActiveSubwayTrips(timestamp, selectedLines);
-        line2Trains = selectedLines.includes(2) ? getScheduledFleet(frozen ?? timestamp) : [];
+        line2Trains = selectedLines.includes(2) ? getScheduledFleet(frozenLine2 ?? timestamp) : [];
       }
       const zoom = map.getZoom();
       const viewport = { width: canvas.clientWidth, height: canvas.clientHeight };
@@ -115,7 +116,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
         });
       }
       for (const train of line2Trains) {
-        const motion = train.getMotion(frozen ?? timestamp);
+        const motion = train.getMotion(frozenLine2 ?? timestamp);
         const icon = sampleOverviewTrainIcon(train.sampler, motion.frontDistanceMeters, LINE_2_MAIN_CAR_COUNT, project, viewport, zoom);
         consider(icon, 2, () => ({
           origin: train.origin,
@@ -127,7 +128,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
             onLine2Focus({ id: train.id });
             focusSubwayTrain(map, LINE_2_MAIN_CAR_COUNT, offset => ({
               sampler: train.sampler,
-              frontDistanceMeters: train.getMotion(frozen ?? timestamp + offset).frontDistanceMeters,
+              frontDistanceMeters: train.getMotion(frozenLine2 ?? timestamp + offset).frontDistanceMeters,
             }), !reduced.matches);
           },
         }));
@@ -150,22 +151,16 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
       pointer = event.point;
       update()?.focus();
     };
-    const motionPreference = () => {
-      frozen = reduced.matches ? trainFrameTimestamp() : null;
-      lastSecond = -1;
-    };
 
     map.on("mousemove", move);
     map.on("mouseout", leave);
     map.on("click", click);
     map.on("movestart", cameraMove);
     map.on("moveend", update);
-    reduced.addEventListener("change", motionPreference);
     const timer = window.setInterval(update, 120);
     return () => {
       cancelAnimationFrame(frame);
       window.clearInterval(timer);
-      reduced.removeEventListener("change", motionPreference);
       map.off("mousemove", move);
       map.off("mouseout", leave);
       map.off("click", click);
@@ -173,7 +168,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
       map.off("moveend", update);
       leave();
     };
-  }, [mapRef, onLine2Focus, selectedLines]);
+  }, [mapRef, onLine2Focus, selectedLines, frozenLine2]);
 
   if (!hover) return null;
   const { icon, tooltip, line, origin, destination, headsign } = hover;

@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import { trainFrameTimestamp } from "../features/subway/line-2-main-simulation";
+import { createSubwayScreenProjector } from "../features/subway/subway-screen-projection";
 import type { ScheduledTrain } from "../features/subway/line-2-timetable";
 import {
   drawOverviewTrainIcon, sampleOverviewTrainIcon,
-  type OverviewTrainIcon, type Pixel, type Project, type Viewport,
+  type OverviewTrainIcon, type Pixel, type Viewport,
 } from "../features/subway/subway-overview-icon";
 import { LINE_2_MAIN_CAR_COUNT } from "../features/subway/subway-train-model";
 
@@ -60,7 +61,7 @@ export function Line2FleetOverview({ trains, selectedId, frozenTimestamp }: Prop
     let frame = 0;
     let viewport: Viewport = { width: 0, height: 0 };
     const lastDwell = new WeakMap<ScheduledTrain, number>();
-    const project: Project = coordinate => map.project(coordinate);
+    const project = createSubwayScreenProjector(map);
     const draw = () => {
       const timestamp = frozenTimestamp ?? trainFrameTimestamp();
       const zoom = map.getZoom();

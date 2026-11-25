@@ -25,6 +25,7 @@ export interface SubwayRouteSampler {
   totalDistanceMeters: number;
   sample: (distanceMeters: number) => SubwayRoutePose;
   project: (coordinate: Readonly<SubwayCoordinate>) => SubwayRouteProjection;
+  elevationAt?: (distanceMeters: number) => number;
 }
 
 // 차량의 앞뒤 대차 지점을 이어 polyline 모서리에서도 연속적인 진행 방향을 구한다.
@@ -176,7 +177,7 @@ function projectCoordinateToSegment(
   };
 }
 
-function calculateCoordinateDistanceMeters(
+export function calculateCoordinateDistanceMeters(
   start: SubwayCoordinate,
   end: SubwayCoordinate,
 ): number {

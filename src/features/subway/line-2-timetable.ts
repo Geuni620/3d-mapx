@@ -1,5 +1,6 @@
 import timetableJson from "./data/line-2-timetable.json?raw";
 import { SEOUL_SUBWAY_OSM_NETWORK } from "./osm-subway-network";
+import { createElevatedSubwayRoute } from "./subway-elevation";
 import {
   createScheduledLeg,
   type SubwayTrainCarPose,
@@ -7,7 +8,6 @@ import {
   type SubwayTrainSimulation,
 } from "./line-2-train-simulation";
 import {
-  createSubwayRouteSampler,
   sampleSubwayRouteChordPose,
   type SubwayRouteSampler,
 } from "./subway-route-sampler";
@@ -116,7 +116,7 @@ export interface ScheduledTrain extends SubwayTrainSimulation {
 
 function prepareRoute(direction: Direction) {
   const route = SEOUL_SUBWAY_OSM_NETWORK.serviceRoutes.find((r) => r.direction === direction);
-  const sampler = route && createSubwayRouteSampler(route.path);
+  const sampler = route && createElevatedSubwayRoute(2, route.path, true);
   const names = data.stations[direction];
   if (
     !route ||

@@ -19,7 +19,7 @@ import type { SubwayLineNumber } from "../features/subway/subway-constants";
 import type { SubwayLayerVisibility } from "../features/subway/subway-layer-visibility";
 import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-ids";
 import { SeoulSubwayLayers } from "./seoul-subway-layers";
-import { DETAIL_START, DETAIL_END } from "../features/subway/line-2-main-simulation";
+import { DETAIL_START, DETAIL_END, trainFrameTimestamp } from "../features/subway/line-2-main-simulation";
 import { Line2Service } from "./line-2-service";
 
 const SubwayFleetOverview = lazy(() => import("./subway-fleet-overview"));
@@ -43,6 +43,15 @@ export function SeoulSubwayMap({
 }: SeoulSubwayMapProps) {
   const [initialStyle] = useState(() => SEOUL_TRANSIT_STYLES[theme]);
   const [requestedTrain, setRequestedTrain] = useState<{ id: string } | null>(null);
+  const [frozenLine2, setFrozenLine2] = useState<number | null>(() =>
+    matchMedia("(prefers-reduced-motion: reduce)").matches ? trainFrameTimestamp() : null,
+  );
+  useEffect(() => {
+    const query = matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setFrozenLine2(query.matches ? trainFrameTimestamp() : null);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
   const visibleStations = useMemo(
     () => createVisibleSubwayStations(selectedLineNumbers),
     [selectedLineNumbers],
@@ -86,11 +95,12 @@ export function SeoulSubwayMap({
       <DeckRouteOverlay layers={subwayDeckLayers} />
       {selectedLineNumbers.length > 0 && layerVisibility.isTrainLayerVisible && (
         <Suspense fallback={null}>
-          <SubwayFleetOverview selectedLines={selectedLineNumbers} onLine2Focus={setRequestedTrain} />
+          <SubwayFleetOverview selectedLines={selectedLineNumbers} onLine2Focus={setRequestedTrain}
+            frozenLine2={frozenLine2} />
         </Suspense>
       )}
       {selectedLineNumbers.includes(2) && layerVisibility.isTrainLayerVisible && (
-        <Line2Service zoom={zoom} requestedTrain={requestedTrain} />
+        <Line2Service zoom={zoom} requestedTrain={requestedTrain} frozen={frozenLine2} />
       )}
     </Map>
   );
