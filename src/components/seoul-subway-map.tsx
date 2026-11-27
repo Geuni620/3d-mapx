@@ -1,3 +1,5 @@
+import { CinemaTour } from "../features/cinema/cinema-tour";
+import type { CinemaShot } from "../features/cinema/cinema-sequence";
 import { attachNightPulseStyle } from "../features/night-pulse/night-pulse-style";
 import { useTrainClock } from "../features/night-pulse/train-clock";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
@@ -36,6 +38,9 @@ interface SeoulSubwayMapProps {
   theme: MapTheme;
   pulse: boolean;
   replay: string | null;
+  cinemaDirect: boolean;
+  cinemaShot: CinemaShot | null;
+  onCinemaShot: (shot: CinemaShot | null) => void;
   onZoomChange: (zoom: number) => void;
 }
 
@@ -47,12 +52,15 @@ export function SeoulSubwayMap({
   theme,
   pulse,
   replay,
+  cinemaDirect,
+  cinemaShot,
+  onCinemaShot,
   onZoomChange,
 }: SeoulSubwayMapProps) {
   const now = useTrainClock();
   const [initialStyle] = useState(() => SEOUL_TRANSIT_STYLES[theme]);
   const [requestedTrain, setRequestedTrain] = useState<{ id: string } | null>(null);
-  const [frozenLine2, setFrozenLine2] = useState<number | null>(() =>
+  const [motionPausedAt, setFrozenLine2] = useState<number | null>(() =>
     matchMedia("(prefers-reduced-motion: reduce)").matches ? now() : null,
   );
   useEffect(() => {
@@ -61,6 +69,7 @@ export function SeoulSubwayMap({
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, [now]);
+  const frozenLine2 = cinemaShot ? null : motionPausedAt;
   const visibleStations = useMemo(
     () => createVisibleSubwayStations(selectedLineNumbers),
     [selectedLineNumbers],
@@ -97,7 +106,7 @@ export function SeoulSubwayMap({
           onZoomChange(nextZoom);
         }
       }}
-      onZoomEnd={({ viewState }) => onZoomChange(viewState.zoom)}
+      onZoomEnd={(event) => { if (!("cinema" in event)) onZoomChange(event.viewState.zoom); }}
     >
       <MapThemeColors theme={theme} pulse={pulse} />
       <SeoulSubwayLayers stations={displayStations} theme={theme} />
@@ -118,6 +127,7 @@ export function SeoulSubwayMap({
       {selectedLineNumbers.includes(2) && layerVisibility.isTrainLayerVisible && (
         <Line2Service zoom={zoom} requestedTrain={requestedTrain} frozen={frozenLine2} pulse={pulse} />
       )}
+      <CinemaTour direct={cinemaDirect} shot={cinemaShot} onShot={onCinemaShot} />
     </Map>
   );
 }

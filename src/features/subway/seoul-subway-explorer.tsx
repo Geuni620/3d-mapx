@@ -1,4 +1,5 @@
-import { parseReplayTime, TrainClock } from "../night-pulse/train-clock";
+import { readCinemaOptions, type CinemaShot } from "../cinema/cinema-sequence";
+import { formatSeoulClock, parseReplayTime, TrainClock } from "../night-pulse/train-clock";
 import { trainFrameTimestamp } from "./line-2-main-simulation";
 import { useEffect, useMemo, useReducer, useState } from "react";
 import { INITIAL_VIEW_STATE } from "../../app/map-config";
@@ -61,16 +62,27 @@ export function SeoulSubwayExplorer() {
   const [zoom, setZoom] = useState(INITIAL_VIEW_STATE.zoom);
   const [preference, setPreference] = useState<MapThemePreference>(() => pulseRequested() ? "dark" : readThemePreference());
   const [pulseEnabled, setPulseEnabled] = useState(readPulsePreference);
+  const [cinema] = useState(() => readCinemaOptions(new URLSearchParams(location.search)));
+  const [cinemaShot, setCinemaShot] = useState<CinemaShot | null>(null);
   const [replay] = useState(() => {
-    const label = new URLSearchParams(location.search).get("at");
+    const search = new URLSearchParams(location.search);
     const wallTime = trainFrameTimestamp();
-    const target = parseReplayTime(label, wallTime);
-    return target === null ? null : { label, now: () => target + trainFrameTimestamp() - wallTime };
+    const target = parseReplayTime(search.get("at"), wallTime, search.get("day"));
+    return target === null ? null : { label: formatSeoulClock(target), now: () => target + trainFrameTimestamp() - wallTime };
   });
   const [daylightTheme, setDaylightTheme] = useState(() => getSeoulDaylightTheme(Date.now()));
-  const theme = preference === "auto" ? daylightTheme : preference;
+  const now = replay?.now ?? trainFrameTimestamp;
+  const [cinemaTheme, setCinemaTheme] = useState(() => getSeoulDaylightTheme(now()));
+  const theme = cinemaShot ? cinemaTheme : preference === "auto" ? daylightTheme : preference;
+  const pulse = theme === "dark" && (Boolean(cinemaShot) || pulseEnabled);
 
-  const pulse = theme === "dark" && pulseEnabled;
+  useEffect(() => {
+    if (!cinemaShot) return;
+    const refresh = () => setCinemaTheme(getSeoulDaylightTheme(now()));
+    refresh();
+    const timer = window.setInterval(refresh, 1000);
+    return () => window.clearInterval(timer);
+  }, [now, cinemaShot]);
   function togglePulse() {
     const enabled = !pulseEnabled;
     setPulseEnabled(enabled);
@@ -111,8 +123,13 @@ export function SeoulSubwayExplorer() {
   const visualLevel = createSubwayVisualLevel(zoom);
 
   return (
-    <div className="relative h-screen w-screen subway-map" data-map-theme={theme}>
-      <TrainClock.Provider value={replay?.now ?? trainFrameTimestamp}>
+    <div className="relative h-dvh w-full subway-map"
+      data-map-theme={theme}
+      data-cinema-shot={cinemaShot?.kind}
+      data-cinema-bridge={cinemaShot?.kind === "side" && cinemaShot.bridge ? "" : undefined}
+      data-cinema-clean={cinemaShot && cinema.clean ? "" : undefined}
+    >
+      <TrainClock.Provider value={now}>
         <SeoulSubwayMap
           selectedLineNumbers={selectedLineNumbers}
           layerVisibility={layerVisibility}
@@ -121,6 +138,9 @@ export function SeoulSubwayExplorer() {
           theme={theme}
           pulse={pulse}
           replay={replay?.label ?? null}
+          cinemaDirect={cinema.direct}
+          cinemaShot={cinemaShot}
+          onCinemaShot={setCinemaShot}
           onZoomChange={setZoom}
         />
       </TrainClock.Provider>
@@ -140,7 +160,7 @@ export function SeoulSubwayExplorer() {
           onClick={togglePulse}>야간 맥박</button>
       </div>
       {debug && <SubwayLineInspector
-        className="absolute left-4 top-4 z-10"
+        className="cinema-inspector absolute left-4 top-4 z-10"
         selectedLineNumberSet={selectedLineNumberSet}
         dispatchSelectedLineNumberSet={dispatchSelectedLineNumberSet}
         layerVisibility={layerVisibility}
