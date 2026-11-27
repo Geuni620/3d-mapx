@@ -1,46 +1,38 @@
 .night-pulse-hud {
   position: absolute;
   z-index: 4;
-  top: 22px;
-  left: 22px;
-  width: 264px;
-  padding: 17px 18px;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 10px;
   border: 1px solid #9bcbb532;
-  border-radius: 16px;
-  background: linear-gradient(155deg, #101f1cee, #080d11ef);
-  box-shadow: 0 14px 42px #0007;
-  color: #edf8f1;
-  font: 500 12px/1.4 system-ui, sans-serif;
+  border-radius: 8px;
+  background: #101816ee;
+  color: #a5b8ae;
+  font: 600 11px/1.4 system-ui, sans-serif;
   pointer-events: none;
   font-variant-numeric: tabular-nums;
 }
-.night-pulse-hud p { margin: 0; }
-.night-pulse-mode { display: flex; align-items: center; gap: 7px; color: #ade3ce; font-weight: 700; }
-.night-pulse-mode i { width: 6px; height: 6px; border-radius: 50%; background: #7affb9; box-shadow: 0 0 8px #7affb9; }
-.night-pulse-hud .night-pulse-clock { font-size: 50px; font-weight: 800; letter-spacing: -.04em; line-height: 1.05; margin: 4px 0 8px; }
-.night-pulse-clock span { color: #a3bfb5; font-size: 11px; letter-spacing: .1em; }
-.night-pulse-totals { color: #becfc6; }
-.night-pulse-totals :is(b, strong) { font-size: 16px; color: #eee; }
-.night-pulse-totals strong { color: #ffd591; }
-.night-pulse-profile { margin: 12px 0; padding-top: 7px; border-top: 1px solid #9bcbb529; }
-.night-pulse-profile canvas { display: block; width: 100%; height: 40px; }
-.night-pulse-profile figcaption { color: #9cbab0; font-size: 10px; text-align: right; }
-.night-pulse-bars { display: grid; gap: 4px; padding: 0; margin: 0; list-style: none; }
-.night-pulse-bars li { display: grid; grid-template-columns: 35px minmax(0, 1fr) 25px; align-items: center; gap: 8px; }
-.night-pulse-bars span { white-space: nowrap; }
-.night-pulse-bars i { min-width: 0; height: 4px; border-radius: 4px; }
-.night-pulse-bars b { text-align: right; }
-.night-pulse-hud .night-pulse-note { margin-top: 10px; color: #a0b1ae; font-size: 10px; }
+
+.night-pulse-clock {
+  color: #edf8f1;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.night-pulse-clock abbr {
+  color: #a5b8ae;
+  font-size: 10px;
+  text-decoration: none;
+}
+
 .night-pulse-surface { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .night-pulse-routes { z-index: 1; }
 .night-pulse-trails { z-index: 2; }
 .night-pulse-trains { z-index: 3; }
+
 @media (max-width: 560px) {
-  .night-pulse-hud { top: 65px; left: 10px; width: max-content; max-width: 174px; padding: 9px 11px; border-radius: 12px; }
-  .night-pulse-mode, .night-pulse-totals { font-size: 10px; }
-  .night-pulse-hud .night-pulse-clock { font-size: 26px; margin-block: 3px; }
-  .night-pulse-totals :is(b, strong) { font-size: 12px; }
-  .night-pulse-profile { margin: 7px 0 0; padding-top: 4px; }
-  .night-pulse-profile canvas { width: 150px; height: 20px; }
-  .night-pulse-bars, .night-pulse-note, .night-pulse-profile figcaption { display: none; }
+  .night-pulse-hud { top: 65px; left: 10px; }
 }
