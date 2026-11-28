@@ -1,7 +1,7 @@
 import { CinemaTour, type CinemaTrainInput } from "../features/cinema/cinema-tour";
 import type { CinemaShot } from "../features/cinema/cinema-sequence";
 import { attachNightPulseStyle } from "../features/night-pulse/night-pulse-style";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { LayersList } from "@deck.gl/core";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import Map, { useControl, useMap } from "react-map-gl/maplibre";
@@ -46,6 +46,8 @@ interface SeoulSubwayMapProps {
   onCinemaShot: (shot: CinemaShot | null) => void;
   followOnMount: boolean;
   onZoomChange: (zoom: number) => void;
+  /** 소요시간 모드: 지도 클릭을 출발·도착 지정에 넘기고 시네마 투어를 멈춘다. */
+  travelTime?: ReactNode;
 }
 
 export function SeoulSubwayMap({
@@ -58,7 +60,9 @@ export function SeoulSubwayMap({
   cinemaDirect, cinemaShot, onCinemaShot,
   followOnMount,
   onZoomChange,
+  travelTime,
 }: SeoulSubwayMapProps) {
+  const travelActive = travelTime !== undefined && travelTime !== null;
   const [initialStyle] = useState(() => SEOUL_TRANSIT_STYLES[theme]);
   const [requestedTrain, setRequestedTrain] = useState<{ id: string | null } | null>(null);
   const [selectedTrainId, selectTrain] = useState<string | null>(null);
@@ -71,6 +75,7 @@ export function SeoulSubwayMap({
     }
   }, [canShowLine2Trains]);
   const [station, setStation] = useState<SubwayStationMapPoint | null>(null);
+  useEffect(() => { if (travelActive) setStation(null); }, [travelActive]);
   const stationRegions = useRef<PulseStationRegion[]>([]);
   const onStationRegions = useCallback((regions: PulseStationRegion[]) => { stationRegions.current = regions; }, []);
   const closeStation = useCallback(() => setStation(null), []);
@@ -121,7 +126,7 @@ export function SeoulSubwayMap({
       }}
       onZoomEnd={event => { if (!("cinema" in event)) onZoomChange(event.viewState.zoom); }}
       onClick={event => {
-        if (event.defaultPrevented || !boardStations.length) return;
+        if (travelActive || event.defaultPrevented || !boardStations.length) return;
         const { x, y } = event.point;
         const map = event.target;
         const byName = (name: string) => boardStations.find(item => item.lineNumber === 2 && line2StationName(item.name) === line2StationName(name))
@@ -177,8 +182,9 @@ export function SeoulSubwayMap({
       {visibleBoard?.lineNumber === 1 && <Line1StationBoard station={visibleBoard} onClose={closeStation} />}
       {visibleBoard?.lineNumber === 2 && <Line2StationBoard station={visibleBoard} name={line2StationName(visibleBoard.name)}
         showTrains={layerVisibility.isTrainLayerVisible} onClose={closeStation} />}
+      {travelTime}
       <CinemaTour direct={cinemaDirect} shot={cinemaShot} onShot={onCinemaShot} trainInput={cinemaInput}
-        blocked={(canShowLine2Trains && selectedTrainId !== null) || visibleBoard !== null} />
+        blocked={travelActive || (canShowLine2Trains && selectedTrainId !== null) || visibleBoard !== null} />
     </Map>
   );
 }

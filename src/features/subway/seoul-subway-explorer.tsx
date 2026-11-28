@@ -1,7 +1,7 @@
 import { readCinemaOptions, type CinemaShot } from "../cinema/cinema-sequence";
 import { ReplayDock } from "../night-pulse/replay-dock";
 import { createTrainClock, TrainClock } from "../night-pulse/train-clock";
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useReducer, useState } from "react";
 import { INITIAL_VIEW_STATE } from "../../app/map-config";
 import { getSeoulDaylightTheme, type MapThemePreference } from "../../app/seoul-daylight";
 import { SeoulSubwayMap } from "../../components/seoul-subway-map";
@@ -18,7 +18,11 @@ import {
   createInitialSubwayLayerVisibility,
   subwayLayerVisibilityReducer,
 } from "./subway-layer-visibility";
+import { readTravelUrl } from "../travel-time/travel-url";
 import "./subway-map-theme.css";
+
+// 소요시간 그래프(약 340KB)는 모드를 켤 때만 불러온다.
+const TravelTimeMode = lazy(() => import("../travel-time/travel-time-mode"));
 
 const debug = import.meta.env.DEV && new URLSearchParams(window.location.search).get("debug") === "1";
 const PULSE_STORAGE_KEY = "3d-mapx:night-pulse";
@@ -65,6 +69,7 @@ export function SeoulSubwayExplorer() {
   const [followOnMount, setFollowOnMount] = useState(false);
   const [preference, setPreference] = useState<MapThemePreference>(() => pulseRequested() ? "dark" : readThemePreference());
   const [pulseEnabled, setPulseEnabled] = useState(readPulsePreference);
+  const [travelActive, setTravelActive] = useState(() => readTravelUrl(location.search).active);
   const [clock] = useState(() => createTrainClock());
   useEffect(() => clock.start(), [clock]);
   const [daylightTheme, setDaylightTheme] = useState(() => getSeoulDaylightTheme(Date.now()));
@@ -81,7 +86,7 @@ export function SeoulSubwayExplorer() {
   }, [clock, touring]);
   const theme = touring ? cinemaTheme : preference === "auto" ? daylightTheme : preference;
 
-  const pulse = theme === "dark" && (touring || pulseEnabled);
+  const pulse = theme === "dark" && !travelActive && (touring || pulseEnabled);
   function togglePulse() {
     const enabled = !pulseEnabled;
     setPulseEnabled(enabled);
@@ -142,11 +147,12 @@ export function SeoulSubwayExplorer() {
     <div className="relative h-dvh w-full subway-map" data-map-theme={theme}
       data-cinema-shot={cinemaShot?.kind}
       data-cinema-bridge={cinemaShot?.kind === "side" && cinemaShot.bridge ? "" : undefined}
-      data-cinema-clean={touring && cinema.clean ? "" : undefined}>
+      data-cinema-clean={touring && cinema.clean ? "" : undefined}
+      data-travel={travelActive ? "" : undefined}>
       <TrainClock.Provider value={clock}>
         <SeoulSubwayMap
           selectedLineNumbers={selectedLineNumbers}
-          layerVisibility={layerVisibility}
+          layerVisibility={travelActive ? { ...layerVisibility, isTrainLayerVisible: false } : layerVisibility}
           visualLevel={visualLevel}
           zoom={zoom}
           cinemaDirect={cinema.direct}
@@ -156,8 +162,13 @@ export function SeoulSubwayExplorer() {
           pulse={pulse}
           followOnMount={followOnMount}
           onZoomChange={setZoom}
+          travelTime={travelActive ? (
+            <Suspense fallback={null}>
+              <TravelTimeMode theme={theme} onClose={() => setTravelActive(false)} />
+            </Suspense>
+          ) : undefined}
         />
-        <ReplayDock />
+        {!travelActive && <ReplayDock />}
       </TrainClock.Provider>
       <div className="subway-theme-switch">
         {preference === "auto" && (
@@ -170,9 +181,11 @@ export function SeoulSubwayExplorer() {
               onClick={() => selectTheme(value)}>{label}</button>
           ))}
         </div>
-        <button type="button" className="subway-pulse-toggle" disabled={theme === "light"} aria-pressed={pulse}
-          title={theme === "light" ? "다크 테마에서 사용" : undefined}
+        <button type="button" className="subway-pulse-toggle" disabled={theme === "light" || travelActive} aria-pressed={pulse}
+          title={theme === "light" ? "다크 테마에서 사용" : travelActive ? "소요시간 모드에서는 꺼집니다" : undefined}
           onClick={togglePulse}>야간 맥박</button>
+        <button type="button" className="subway-pulse-toggle subway-travel-toggle" aria-pressed={travelActive}
+          onClick={() => setTravelActive(!travelActive)}>소요시간</button>
       </div>
       {selectedLineNumberSet.has(1) && layerVisibility.isRouteLayerVisible && <Line1MapLegend />}
       {debug && <SubwayLineInspector
