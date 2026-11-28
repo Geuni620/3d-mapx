@@ -1,0 +1,62 @@
+.line1-key {
+  display: grid;
+  gap: 5px;
+  padding: 0;
+  list-style: none;
+  font: 650 11px/1.4 system-ui, sans-serif;
+}
+.line1-key li { display: flex; align-items: center; gap: 8px; }
+.line1-key i { width: 18px; height: 4px; flex: 0 0 auto; border-radius: 4px; }
+.line1-key small { margin-left: 4px; opacity: .8; font-size: .95em; font-weight: 500; }
+.line1-map-legend, .line1-card {
+  position: absolute;
+  z-index: 7;
+  border: 1px solid var(--map-control-edge);
+  background: var(--map-control-bg);
+  color: var(--map-control-ink);
+  box-shadow: var(--map-control-shadow);
+  font: 600 13px/1.4 system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.line1-map-legend { left: 16px; bottom: 180px; border-radius: 12px; }
+.line1-map-legend summary { display: flex; align-items: center; gap: 7px; padding: 8px; cursor: pointer; list-style: none; }
+.line1-map-legend summary::-webkit-details-marker { display: none; }
+.line1-map-legend summary::after { content: "＋"; margin-left: auto; padding: 0 3px; color: var(--map-control-muted); }
+.line1-map-legend[open] summary::after { content: "−"; }
+.line1-map-legend[open] { width: 234px; }
+.line1-map-legend .line1-chip { width: 22px; height: 22px; flex-basis: 22px; font-size: 12px; }
+.line1-map-legend .line1-key, .line1-map-legend dl { margin: 0; padding: 8px 12px; border-top: 1px solid var(--map-control-edge); }
+.line1-map-legend dl div { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; font-size: 11px; }
+.line1-map-legend dd { color: var(--map-control-muted); }
+.subway-map[data-cinema-clean] .line1-map-legend { display: none; }
+
+.line1-card {
+  top: 68px;
+  right: 16px;
+  width: min(350px, calc(100% - 32px));
+  padding: 14px;
+  border-radius: 15px;
+}
+.line1-card-header { display: flex; align-items: center; gap: 10px; }
+.line1-card-header h2 { margin: 0; font-size: 19px; font-weight: 800; }
+.line1-card p { margin: 0; }
+.line1-card-header p, .line1-card small, .line1-card footer, .line1-train-detail { color: var(--map-control-muted); font-size: 11px; }
+.line1-chip { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 50%; color: #fff; background: #0052a4; font-weight: 800; }
+.line1-card-header button { margin-left: auto; width: 38px; height: 38px; border: 1px solid var(--map-control-edge); border-radius: 50%; cursor: pointer; font-size: 20px; }
+.line1-map-legend summary:focus-visible, .line1-card button:focus-visible { outline: 2px solid var(--map-control-accent); outline-offset: 2px; }
+.line1-card ol { list-style: none; margin: 10px 0 0; padding: 0; }
+.line1-card li { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 42px; border-top: 1px solid var(--map-control-edge); }
+.line1-card li div:last-child { text-align: right; white-space: nowrap; }
+.line1-card li:first-child div:last-child strong { color: var(--map-control-accent); }
+.line1-card small { display: block; }
+.line1-card footer { padding-top: 8px; border-top: 1px solid var(--map-control-edge); }
+.line1-card .line1-board-empty { padding: 10px 0; }
+.line1-board-marker { display: block; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; background: #0052a4; box-shadow: 0 0 0 4px #318cdd99; }
+.line1-card .line1-train-detail { margin-top: 10px; }
+@media (max-width: 640px) {
+  .line1-map-legend { top: 60px; bottom: auto; left: 10px; z-index: 7; }
+  .line1-map-legend[open] { bottom: auto; }
+  .line1-card { top: auto; right: 10px; bottom: calc(60px + env(safe-area-inset-bottom, 0px)); width: min(350px, calc(100% - 20px)); }
+  .subway-map:has(.line1-card) :is(.night-pulse-hud, .line2-service-panel, .replay-dock) { display: none; }
+  .subway-map:has(.night-pulse-hud) .line1-map-legend { top: 126px; }
+}

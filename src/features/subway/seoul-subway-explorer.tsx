@@ -5,6 +5,7 @@ import { useEffect, useMemo, useReducer, useState } from "react";
 import { INITIAL_VIEW_STATE } from "../../app/map-config";
 import { getSeoulDaylightTheme, type MapThemePreference } from "../../app/seoul-daylight";
 import { SeoulSubwayMap } from "../../components/seoul-subway-map";
+import { Line1MapLegend } from "../../components/line-1-section-key";
 import { SubwayLineInspector } from "../../components/subway-line-inspector";
 import { createSubwayVisualLevel } from "./subway-paths";
 import {
@@ -173,6 +174,7 @@ export function SeoulSubwayExplorer() {
           title={theme === "light" ? "다크 테마에서 사용" : undefined}
           onClick={togglePulse}>야간 맥박</button>
       </div>
+      {selectedLineNumberSet.has(1) && layerVisibility.isRouteLayerVisible && <Line1MapLegend />}
       {debug && <SubwayLineInspector
         className="cinema-inspector absolute left-4 top-4 z-10"
         selectedLineNumberSet={selectedLineNumberSet}

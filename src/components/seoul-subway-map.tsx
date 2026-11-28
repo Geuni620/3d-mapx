@@ -24,6 +24,7 @@ import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-i
 import { SeoulSubwayLayers } from "./seoul-subway-layers";
 import { DETAIL_START, DETAIL_END, PULSE_DETAIL_START } from "../features/subway/line-2-main-simulation";
 import { Line2Service } from "./line-2-service";
+import { Line1StationBoard } from "./line-1-station-board";
 import { Line2StationBoard } from "./line-2-station-board";
 import { line2StationName } from "../features/subway/line-2-station-board";
 import { getLine2StationDirections } from "../features/subway/line-2-timetable";
@@ -73,8 +74,8 @@ export function SeoulSubwayMap({
   const stationRegions = useRef<PulseStationRegion[]>([]);
   const onStationRegions = useCallback((regions: PulseStationRegion[]) => { stationRegions.current = regions; }, []);
   const closeStation = useCallback(() => setStation(null), []);
-  const focusTrain = useCallback((train: { id: string | null }) => {
-    if (train.id !== null) setStation(null);
+  const focusTrain = useCallback((train: { id: string | null; clearStation?: boolean }) => {
+    if (train.id !== null || train.clearStation) setStation(null);
     setRequestedTrain(train);
   }, []);
   const visibleStations = useMemo(
@@ -86,8 +87,8 @@ export function SeoulSubwayMap({
     () => createSubwayDisplayStations(visibleStations),
     [visibleStations],
   );
-  const line2Stations = useMemo(() => displayStations.filter(
-    candidate => candidate.lineNumber === 2 && getLine2StationDirections(line2StationName(candidate.name)),
+  const boardStations = useMemo(() => displayStations.filter(
+    candidate => candidate.lineNumber === 1 || (candidate.lineNumber === 2 && getLine2StationDirections(line2StationName(candidate.name))),
   ), [displayStations]);
   const routePaths = useMemo(() => createSubwayRoutePaths(selectedLineNumbers), [selectedLineNumbers]);
   const stationCircles = useMemo(() => createSubwayStationCircles(displayStations), [displayStations]);
@@ -101,6 +102,8 @@ export function SeoulSubwayMap({
       ),
     [routePaths, stationCircles, layerVisibility, visualLevel, pulse],
   );
+
+  const visibleBoard = station && selectedLineNumbers.includes(station.lineNumber) ? station : null;
 
   return (
     <Map
@@ -118,15 +121,18 @@ export function SeoulSubwayMap({
       }}
       onZoomEnd={event => { if (!("cinema" in event)) onZoomChange(event.viewState.zoom); }}
       onClick={event => {
-        if (event.defaultPrevented || !line2Stations.length) return;
+        if (event.defaultPrevented || !boardStations.length) return;
         const { x, y } = event.point;
         const map = event.target;
-        const byName = (name: string) => line2Stations.find(item => line2StationName(item.name) === line2StationName(name));
+        const byName = (name: string) => boardStations.find(item => item.lineNumber === 2 && line2StationName(item.name) === line2StationName(name))
+          ?? boardStations.find(item => item.lineNumber === 1 && line2StationName(item.name) === line2StationName(name));
         const features = map.getLayer(SUBWAY_STATION_LABEL_LAYER_ID)
           ? map.queryRenderedFeatures(event.point, { layers: [SUBWAY_STATION_LABEL_LAYER_ID] })
           : [];
         // 환승역에서 지도에 남은 라벨이 다른 호선 소속이어도 같은 역의 전광판을 연다.
-        let picked = features.map(feature => byName(feature.properties.name)).find(Boolean);
+        let picked = features.map(feature =>
+          boardStations.find(item => item.id === feature.properties.id),
+        ).find(Boolean) ?? features.map(feature => byName(feature.properties.name)).find(Boolean);
         if (!picked && layerVisibility.isStationCircleLayerVisible) {
           if (pulse) {
             const region = stationRegions.current.find(region =>
@@ -135,7 +141,7 @@ export function SeoulSubwayMap({
             if (region) picked = byName(region.name);
           } else if (map.getZoom() > 12.4) {
             let distance = 12;
-            for (const candidate of line2Stations) {
+            for (const candidate of boardStations) {
               const point = map.project([candidate.longitude, candidate.latitude]);
               const offset = Math.hypot(x - point.x, y - point.y);
               if (offset < distance) { picked = candidate; distance = offset; }
@@ -149,7 +155,7 @@ export function SeoulSubwayMap({
       }}
     >
       <MapThemeColors theme={theme} pulse={pulse} />
-      <SeoulSubwayLayers stations={displayStations} theme={theme} />
+      <SeoulSubwayLayers stations={displayStations} theme={theme} showRouteLabels={layerVisibility.isRouteLayerVisible} />
       <DeckRouteOverlay layers={subwayDeckLayers} />
       {pulse && <Suspense fallback={null}>
         <NightPulse onStationRegions={onStationRegions} lines={selectedLineNumbers} stations={displayStations}
@@ -166,12 +172,13 @@ export function SeoulSubwayMap({
       {canShowLine2Trains && (
         <Line2Service zoom={zoom} requestedTrain={requestedTrain} pulse={pulse}
           selectedId={selectedTrainId} select={selectTrain}
-          boardOpen={station !== null} onInspect={closeStation} followOnMount={followOnMount} />
+          boardOpen={visibleBoard !== null} onInspect={closeStation} followOnMount={followOnMount} />
       )}
-      {station && selectedLineNumbers.includes(2) && <Line2StationBoard station={station} name={line2StationName(station.name)}
+      {visibleBoard?.lineNumber === 1 && <Line1StationBoard station={visibleBoard} onClose={closeStation} />}
+      {visibleBoard?.lineNumber === 2 && <Line2StationBoard station={visibleBoard} name={line2StationName(visibleBoard.name)}
         showTrains={layerVisibility.isTrainLayerVisible} onClose={closeStation} />}
       <CinemaTour direct={cinemaDirect} shot={cinemaShot} onShot={onCinemaShot} trainInput={cinemaInput}
-        blocked={(canShowLine2Trains && selectedTrainId !== null) || (station !== null && selectedLineNumbers.includes(2))} />
+        blocked={(canShowLine2Trains && selectedTrainId !== null) || visibleBoard !== null} />
     </Map>
   );
 }

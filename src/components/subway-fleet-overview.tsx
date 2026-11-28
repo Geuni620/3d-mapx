@@ -21,7 +21,7 @@ import { SubwayTrainHover } from "./subway-train-hover";
 export default function SubwayFleetOverview({ cinemaInput, selectedLines, onLine2Focus, pulse }: {
   cinemaInput: RefObject<CinemaTrainInput>;
   selectedLines: readonly SubwayLineNumber[];
-  onLine2Focus: (train: { id: string | null }) => void;
+  onLine2Focus: (train: { id: string | null; clearStation?: boolean }) => void;
   pulse: boolean;
 }) {
   const now = useTrainClock();

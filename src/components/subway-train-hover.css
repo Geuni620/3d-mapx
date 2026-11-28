@@ -33,3 +33,5 @@
   border-color: #96a99a;
 }
 .subway-map[data-map-theme="light"] .subway-train-hover-tooltip > span { color: #405e51; }
+
+.line1-tooltip-section { display: block; margin-top: 3px; }

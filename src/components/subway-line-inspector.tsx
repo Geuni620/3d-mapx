@@ -1,5 +1,6 @@
 import { useState, type Dispatch } from "react";
 import { cva } from "class-variance-authority";
+import { Line1SectionKey } from "./line-1-section-key";
 import { SubwayLayerVisibilityEditor } from "./subway-layer-visibility-editor";
 import {
   SUBWAY_LINE_COLORS,
@@ -70,6 +71,7 @@ export function SubwayLineInspector({
         selectedLineNumberSet={selectedLineNumberSet}
         onToggleLine={handleToggleLine}
       />
+      {selectedLineNumberSet.has(1) && <div className="mt-3 border-t border-white/10 pt-2"><Line1SectionKey details /></div>}
       <SubwayLineActions
         onSelectAll={handleSelectAllLines}
         onClearSelection={handleClearLineSelection}

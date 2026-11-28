@@ -1,13 +1,14 @@
 import type { RefObject } from "react";
 import type { CinemaTrainInput } from "../features/cinema/cinema-tour";
-import { useTrainClockStore } from "../features/night-pulse/train-clock";
+import { useTrainClockStore, useTrainTime } from "../features/night-pulse/train-clock";
 import { useEffect, useState } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import type { MapMouseEvent } from "maplibre-gl";
+import { getLine1SectionLabel, getLine1TrackSection, getLine1TripPresentation } from "../features/subway/line-1-sections";
 import { line2Headsign } from "../features/subway/line-2-presentation";
 import { getScheduledFleet } from "../features/subway/line-2-timetable";
 import {
-  getActiveSubwayTrips, getSubwayServiceSecond, getSubwayTripJourney, sampleSubwayTrip,
+  getActiveSubwayTrips, getScheduledSubwayTrips, getSubwayServiceSecond, getSubwayTripJourney, sampleSubwayTrip, type TimetableTrip,
 } from "../features/subway/subway-timetable";
 import {
   sampleOverviewTrainIcon, type CarSegment, type OverviewTrainIcon, type Pixel,
@@ -23,6 +24,8 @@ interface HoveredTrain {
   origin: string;
   destination: string;
   headsign: string;
+  section?: string;
+  line1Trip?: TimetableTrip;
   icon: OverviewTrainIcon;
   tooltip: Pixel;
   focus: () => void;
@@ -56,10 +59,11 @@ function distanceToIcon(point: Pixel, icon: OverviewTrainIcon) {
 export function SubwayTrainHover({ cinemaInput, selectedLines, onLine2Focus }: {
   cinemaInput: RefObject<CinemaTrainInput>;
   selectedLines: readonly SubwayLineNumber[];
-  onLine2Focus: (train: { id: string | null }) => void;
+  onLine2Focus: (train: { id: string | null; clearStation?: boolean }) => void;
 }) {
   const clock = useTrainClockStore();
   const { current: mapRef } = useMap();
+  const [selectedTrip, setSelectedTrip] = useState<TimetableTrip | null>(null);
   const [hover, setHover] = useState<HoveredTrain | null>(null);
 
   useEffect(() => {
@@ -86,13 +90,13 @@ export function SubwayTrainHover({ cinemaInput, selectedLines, onLine2Focus }: {
       const viewport = { width: canvas.clientWidth, height: canvas.clientHeight };
       const tooltip = {
         x: Math.max(8, Math.min(pointer.x + 14, viewport.width - 232)),
-        y: pointer.y + 96 < viewport.height ? pointer.y + 14 : Math.max(8, pointer.y - 90),
+        y: pointer.y + 110 < viewport.height ? pointer.y + 14 : Math.max(8, pointer.y - 104),
       };
       let closest: HoveredTrain | null = null;
       let closestDistance = Infinity;
       const consider = (
         icon: OverviewTrainIcon | undefined, line: SubwayLineNumber,
-        journey: () => Pick<HoveredTrain, "origin" | "destination" | "headsign" | "focus">,
+        journey: () => Pick<HoveredTrain, "origin" | "destination" | "headsign" | "section" | "line1Trip" | "focus">,
       ) => {
         if (!icon || !pointer) return;
         const distance = distanceToIcon(pointer, icon);
@@ -108,11 +112,15 @@ export function SubwayTrainHover({ cinemaInput, selectedLines, onLine2Focus }: {
         const icon = sampleOverviewTrainIcon(pose.sampler, pose.frontDistanceMeters, pose.carCount, project, viewport, zoom, pose.front);
         consider(icon, pose.line, () => {
           const journey = getSubwayTripJourney(trip);
+          const presentation = trip[0] === 1 ? {
+            ...getLine1TripPresentation(trip),
+            section: getLine1SectionLabel(getLine1TrackSection(pose.path, pose.frontDistanceMeters)),
+            line1Trip: trip,
+          } : { ...journey, headsign: `${journey.destination}행` };
           return {
-            ...journey,
-            headsign: `${journey.destination}행`,
+            ...presentation,
             focus: () => {
-              onLine2Focus({ id: null });
+              onLine2Focus({ id: null, clearStation: trip[0] === 1 });
               focusSubwayTrain(
                 map, pose.carCount, offset => sampleSubwayTrip(trip, getSubwayServiceSecond(clock.forecast(offset))) ?? pose,
                 !reduced.matches,
@@ -157,9 +165,10 @@ export function SubwayTrainHover({ cinemaInput, selectedLines, onLine2Focus }: {
     const leave = () => { pointer = undefined; canvas.style.cursor = ""; setHover(null); };
     const cameraMove = () => { canvas.style.cursor = ""; setHover(null); };
     const click = (event: MapMouseEvent) => {
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented) { setSelectedTrip(null); return; }
       pointer = event.point;
       const train = update();
+      setSelectedTrip(train?.line1Trip ?? null);
       if (train) {
         event.preventDefault();
         cinemaInput.current.restoreBeforeFocus?.();
@@ -191,10 +200,13 @@ export function SubwayTrainHover({ cinemaInput, selectedLines, onLine2Focus }: {
     };
   }, [mapRef, onLine2Focus, selectedLines, clock, cinemaInput]);
 
-  if (!hover) return null;
-  const { icon, tooltip, line, origin, destination, headsign } = hover;
+  const card = selectedTrip && selectedLines.includes(1) &&
+    <Line1TrainCard trip={selectedTrip} onClose={() => setSelectedTrip(null)} />;
+  if (!hover) return card;
+  const { icon, tooltip, line, origin, destination, headsign, section } = hover;
   const height = Math.max(14, icon.bodyWidth + 8);
   return <>
+    {card}
     {iconSegments(icon).map(({ front, rear }, index) => {
       const length = Math.hypot(front.x - rear.x, front.y - rear.y);
       if (length < 0.2) return null;
@@ -208,6 +220,25 @@ export function SubwayTrainHover({ cinemaInput, selectedLines, onLine2Focus }: {
       <div><span className="subway-train-hover-line" style={{ backgroundColor: SUBWAY_LINE_COLORS[line] }}>{line}호선</span>
         <strong>{headsign}</strong></div>
       <span>{origin} → {destination} · {icon.carCount}량</span>
+      {section && <span className="line1-tooltip-section">{section}</span>}
     </div>
   </>;
+}
+
+function Line1TrainCard({ trip, onClose }: { trip: TimetableTrip; onClose: () => void }) {
+  const { time } = useTrainTime();
+  const pose = getScheduledSubwayTrips(time).includes(trip)
+    ? sampleSubwayTrip(trip, getSubwayServiceSecond(time))
+    : undefined;
+  const { headsign, origin, destination } = getLine1TripPresentation(trip);
+  return <section className="line1-card" aria-label="1호선 열차 정보">
+    <header className="line1-card-header">
+      <span className="line1-chip" aria-hidden="true">1</span>
+      <div><h2>{headsign}</h2><p>{origin} → {destination} · {trip[4]}량</p></div>
+      <button type="button" aria-label="열차 정보 닫기" onClick={onClose}>×</button>
+    </header>
+    <p className="line1-train-detail">{pose
+      ? getLine1SectionLabel(getLine1TrackSection(pose.path, pose.frontDistanceMeters))
+      : "이 시각에는 운행하지 않습니다."}</p>
+  </section>;
 }
