@@ -4,18 +4,22 @@ import type { MapTheme } from "../app/seoul-daylight";
 import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-ids";
 import {
   createSubwayStationGeoJson,
+  createLine1SectionLabelGeoJson,
   type SubwayStationMapPoint,
 } from "../features/subway/subway-geojson";
 
 interface SeoulSubwayLayersProps {
   stations: SubwayStationMapPoint[];
   theme: MapTheme;
+  showRouteLabels: boolean;
 }
 
-export function SeoulSubwayLayers({ stations, theme }: SeoulSubwayLayersProps) {
+export function SeoulSubwayLayers({ stations, theme, showRouteLabels }: SeoulSubwayLayersProps) {
   const stationGeoJson = useMemo(() => createSubwayStationGeoJson(stations), [stations]);
 
-  return (
+  const sectionLabels = useMemo(() => createLine1SectionLabelGeoJson(stations), [stations]);
+
+  return <>
     <Source id="seoul-subway-stations" type="geojson" data={stationGeoJson}>
       <Layer
         id={SUBWAY_STATION_LABEL_LAYER_ID}
@@ -38,5 +42,19 @@ export function SeoulSubwayLayers({ stations, theme }: SeoulSubwayLayersProps) {
         }}
       />
     </Source>
-  );
+    {showRouteLabels && sectionLabels.features.length > 0 &&
+      <Source id="line-1-section-labels" type="geojson" data={sectionLabels}>
+        <Layer id="line-1-section-label" type="symbol" minzoom={10.75} layout={{
+          "text-field": ["get", "name"],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": 12,
+          "text-offset": [0, 1],
+          "text-anchor": "top",
+        }} paint={{
+          "text-color": theme === "light" ? "#083c76" : "#cae6ff",
+          "text-halo-color": theme === "light" ? "#f5faff" : "#071b35",
+          "text-halo-width": 2,
+        }} />
+      </Source>}
+  </>;
 }

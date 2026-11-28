@@ -34,12 +34,20 @@ export function getSubwayTripJourney(trip: TimetableTrip) {
   return { origin, destination };
 }
 
+export function getSubwayTripLegs(trip: TimetableTrip): readonly TimetableLeg[] {
+  return timetable.patterns[trip[3]];
+}
+
+export function getScheduledSubwayTrips(timestampMs: number): readonly TimetableTrip[] {
+  return timetable.days[getLine2ServiceDay(timestampMs)];
+}
+
 export function getActiveSubwayTrips(
   timestampMs: number,
   selectedLines: readonly SubwayLineNumber[],
 ): TimetableTrip[] {
   const seconds = getSubwayServiceSecond(timestampMs);
-  return timetable.days[getLine2ServiceDay(timestampMs)].filter(
+  return getScheduledSubwayTrips(timestampMs).filter(
     ([line, start, end]) => selectedLines.includes(line) && start <= seconds && seconds < end,
   );
 }
@@ -67,6 +75,7 @@ export function sampleSubwayTrip(
         line,
         carCount,
         sampler,
+        path: timetable.paths[path],
         frontDistanceMeters: distance,
         front: sampler.sample(distance).coordinate,
         speedMetersPerSecond: motion.speedMetersPerSecond,

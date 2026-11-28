@@ -96,8 +96,8 @@ export function NightPulseLayer({ lines, stations, routes, showRoutes, showStati
     const trains = trainSurface.current?.getContext("2d");
     if (!map || !route || !trails || !trains) return;
 
-    const routePoints = routes.map(({ lineNumber, elevatedPath }) => ({
-      lineNumber,
+    const routePoints = routes.map(({ strokeColor, elevatedPath }) => ({
+      strokeColor,
       path: elevatedPath.map(([lng, lat, altitude]) => MercatorCoordinate.fromLngLat({ lng, lat }, altitude)),
     }));
     const hubs = showStations ? groupHubs(stations) : [];
@@ -167,7 +167,7 @@ export function NightPulseLayer({ lines, stations, routes, showRoutes, showStati
       route!.clearRect(0, 0, viewport.width, viewport.height);
       const width = Math.min(4, Math.max(1, (zoom - 9.5) * .8));
       if (showRoutes) {
-        const paths = routePoints.map(({ lineNumber, path: points }) => {
+        const paths = routePoints.map(({ strokeColor, path: points }) => {
           const path = new Path2D();
           let previous = projectToClip(points[0]);
           let previousEnd: PulseClipPoint | undefined;
@@ -185,7 +185,7 @@ export function NightPulseLayer({ lines, stations, routes, showRoutes, showStati
             path.lineTo(p.x, p.y);
             previousEnd = end;
           }
-          return { path, color: SUBWAY_LINE_COLORS[lineNumber] };
+          return { path, color: strokeColor };
         });
         route!.lineJoin = route!.lineCap = "round";
         for (const [scale, alpha, mode] of [

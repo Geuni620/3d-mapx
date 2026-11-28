@@ -1,3 +1,4 @@
+import { getLine1SectionColor, splitLine1Path } from "./line-1-sections";
 import { PathLayer, ScatterplotLayer } from "@deck.gl/layers";
 import type { LayersList } from "@deck.gl/core";
 import {
@@ -15,6 +16,7 @@ interface SubwayRoutePath {
   lineNumber: SubwayLineNumber;
   path: SubwayCoordinate[];
   elevatedPath: ElevatedSubwayCoordinate[];
+  strokeColor: string;
   color: [red: number, green: number, blue: number];
   highlightColor: [red: number, green: number, blue: number];
 }
@@ -360,28 +362,40 @@ const elevatedPaths = new WeakMap<SubwayCoordinate[], ElevatedSubwayCoordinate[]
 
 export function createSubwayRoutePaths(
   selectedLineNumbers: SubwayLineNumber[],
+  splitSections = true,
 ): SubwayRoutePath[] {
   return selectedLineNumbers.flatMap((lineNumber) => {
-    const color = hexToRgb(SUBWAY_LINE_COLORS[lineNumber]);
     const osmRoutes = SEOUL_SUBWAY_OSM_NETWORK.routes.filter(
       (route) => route.lineNumber === lineNumber,
     );
 
     return osmRoutes.flatMap((route) =>
-      route.pathSegments.map((pathSegment, index) => {
+      route.pathSegments.flatMap((pathSegment, index) => {
         let elevatedPath = elevatedPaths.get(pathSegment);
         if (!elevatedPath) {
           elevatedPath = elevateSubwayPath(lineNumber, pathSegment);
           elevatedPaths.set(pathSegment, elevatedPath);
         }
-        return {
-          id: `${route.id}-${index}`,
-          lineNumber,
-          path: pathSegment,
-          elevatedPath,
-          color,
-          highlightColor: brightenRgb(color, 72),
-        };
+        const parts = lineNumber === 1 && splitSections ? splitLine1Path(pathSegment, index) : [{ path: pathSegment }];
+        let start = 0;
+        return parts.map((part, partIndex) => {
+          const strokeColor = "section" in part
+            ? getLine1SectionColor(part.section)
+            : SUBWAY_LINE_COLORS[lineNumber];
+          const color = hexToRgb(strokeColor);
+          const end = start + part.path.length;
+          const result = {
+            id: `${route.id}-${index}-${partIndex}`,
+            lineNumber,
+            path: part.path,
+            elevatedPath: elevatedPath.slice(start, end),
+            strokeColor,
+            color,
+            highlightColor: brightenRgb(color, 72),
+          };
+          start = end - 1;
+          return result;
+        });
       }),
     );
   });
@@ -402,7 +416,7 @@ function createSubwayRoutePathsByLineNumber(
 
     routePathsByLineNumber.set(
       station.lineNumber,
-      createSubwayRoutePaths([station.lineNumber]),
+      createSubwayRoutePaths([station.lineNumber], false),
     );
   });
 
