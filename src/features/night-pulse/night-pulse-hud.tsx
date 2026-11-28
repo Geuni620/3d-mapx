@@ -1,23 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { getSubwayServiceMidnight } from "../subway/line-2-timetable";
 import { SUBWAY_LINES, SUBWAY_LINE_COLORS } from "../subway/subway-constants";
 import { createDayProfile, readPulseStats } from "./day-profile";
-import { formatSeoulClock, useTrainClock } from "./train-clock";
+import { formatSeoulClock, useTrainTime } from "./train-clock";
 import "./night-pulse-hud.css";
 
-export function NightPulseHud({ replay }: { replay: string | null }) {
-  const now = useTrainClock();
-  const [stats, setStats] = useState(() => readPulseStats(now()));
+export function NightPulseHud() {
+  const state = useTrainTime();
+  const second = Math.floor(state.time / 1000);
+  const stats = useMemo(() => readPulseStats(second * 1000), [second]);
   const chart = useRef<HTMLCanvasElement>(null);
   const serviceDay = getSubwayServiceMidnight(stats.time);
   const profile = useMemo(() => createDayProfile(serviceDay + 5 * 3_600_000), [serviceDay]);
-
-  useEffect(() => {
-    const update = () => setStats(readPulseStats(now()));
-    update();
-    const timer = setInterval(update, 1000);
-    return () => clearInterval(timer);
-  }, [now]);
 
   useEffect(() => {
     const context = chart.current?.getContext("2d");
@@ -56,7 +50,7 @@ export function NightPulseHud({ replay }: { replay: string | null }) {
   return (
     <section className="night-pulse-hud" aria-label="야간 맥박 운행 현황">
       <header className="night-pulse-header">
-        <p className="night-pulse-mode">{replay ? `재생 중 ${replay}` : <><i aria-hidden="true" /> LIVE</>}</p>
+        <p className="night-pulse-mode">{state.mode === "replay" ? state.playing ? "시간표 재생 중" : "일시정지" : <><i aria-hidden="true" /> LIVE</>}</p>
         <p className="night-pulse-clock">{formatSeoulClock(stats.time)} <span>KST</span></p>
         <p className="night-pulse-totals"><b>{stats.total}</b>편성 운행 · <strong>{stats.dwelling}</strong>정차 중</p>
       </header>

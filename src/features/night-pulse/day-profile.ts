@@ -32,3 +32,14 @@ export function readPulseStats(time: number) {
   }
   return { time, perLine, total: trips.length + main.length, dwelling };
 }
+
+const replayProfiles = new Map<number, ReturnType<typeof createDayProfile>>();
+
+export function getReplayProfile(referenceDay: number) {
+  let profile = replayProfiles.get(referenceDay);
+  if (!profile) {
+    profile = createDayProfile(referenceDay + 5 * 3_600_000);
+    replayProfiles.set(referenceDay, profile);
+  }
+  return profile;
+}

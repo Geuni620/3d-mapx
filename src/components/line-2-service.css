@@ -7,7 +7,7 @@
 .line2-service-panel {
   position: absolute;
   right: 16px;
-  bottom: 40px;
+  bottom: calc(40px + var(--replay-offset, 0px));
   z-index: 4;
   inline-size: min(354px, calc(100% - 32px));
   color: var(--map-control-ink);
@@ -153,7 +153,7 @@
   outline: 2px solid #a7ecd0;
 }
 @media (max-width: 640px) {
-  .line2-service-panel { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+  .line2-service-panel { bottom: calc(64px + env(safe-area-inset-bottom, 0px) + var(--replay-offset, 0px)); }
 }
 
 @media (max-width: 420px) {

@@ -1,5 +1,5 @@
-import { parseReplayTime, TrainClock } from "../night-pulse/train-clock";
-import { trainFrameTimestamp } from "./line-2-main-simulation";
+import { ReplayDock } from "../night-pulse/replay-dock";
+import { createTrainClock, TrainClock } from "../night-pulse/train-clock";
 import { useEffect, useMemo, useReducer, useState } from "react";
 import { INITIAL_VIEW_STATE } from "../../app/map-config";
 import { getSeoulDaylightTheme, type MapThemePreference } from "../../app/seoul-daylight";
@@ -61,12 +61,8 @@ export function SeoulSubwayExplorer() {
   const [zoom, setZoom] = useState(INITIAL_VIEW_STATE.zoom);
   const [preference, setPreference] = useState<MapThemePreference>(() => pulseRequested() ? "dark" : readThemePreference());
   const [pulseEnabled, setPulseEnabled] = useState(readPulsePreference);
-  const [replay] = useState(() => {
-    const label = new URLSearchParams(location.search).get("at");
-    const wallTime = trainFrameTimestamp();
-    const target = parseReplayTime(label, wallTime);
-    return target === null ? null : { label, now: () => target + trainFrameTimestamp() - wallTime };
-  });
+  const [clock] = useState(() => createTrainClock());
+  useEffect(() => clock.start(), [clock]);
   const [daylightTheme, setDaylightTheme] = useState(() => getSeoulDaylightTheme(Date.now()));
   const theme = preference === "auto" ? daylightTheme : preference;
 
@@ -112,7 +108,7 @@ export function SeoulSubwayExplorer() {
 
   return (
     <div className="relative h-screen w-screen subway-map" data-map-theme={theme}>
-      <TrainClock.Provider value={replay?.now ?? trainFrameTimestamp}>
+      <TrainClock.Provider value={clock}>
         <SeoulSubwayMap
           selectedLineNumbers={selectedLineNumbers}
           layerVisibility={layerVisibility}
@@ -120,9 +116,9 @@ export function SeoulSubwayExplorer() {
           zoom={zoom}
           theme={theme}
           pulse={pulse}
-          replay={replay?.label ?? null}
           onZoomChange={setZoom}
         />
+        <ReplayDock />
       </TrainClock.Provider>
       <div className="subway-theme-switch">
         {preference === "auto" && (
