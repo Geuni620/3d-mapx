@@ -38,6 +38,7 @@ interface SeoulSubwayMapProps {
   zoom: number;
   theme: MapTheme;
   pulse: boolean;
+  followOnMount: boolean;
   onZoomChange: (zoom: number) => void;
 }
 
@@ -48,10 +49,15 @@ export function SeoulSubwayMap({
   zoom,
   theme,
   pulse,
+  followOnMount,
   onZoomChange,
 }: SeoulSubwayMapProps) {
   const [initialStyle] = useState(() => SEOUL_TRANSIT_STYLES[theme]);
   const [requestedTrain, setRequestedTrain] = useState<{ id: string | null } | null>(null);
+  const canShowLine2Trains = selectedLineNumbers.includes(2) && layerVisibility.isTrainLayerVisible;
+  useEffect(() => {
+    if (!canShowLine2Trains) setRequestedTrain(null);
+  }, [canShowLine2Trains]);
   const [station, setStation] = useState<SubwayStationMapPoint | null>(null);
   const stationRegions = useRef<PulseStationRegion[]>([]);
   const onStationRegions = useCallback((regions: PulseStationRegion[]) => { stationRegions.current = regions; }, []);
@@ -146,8 +152,9 @@ export function SeoulSubwayMap({
           <SubwayFleetOverview selectedLines={selectedLineNumbers} onLine2Focus={focusTrain} pulse={pulse} />
         </Suspense>
       )}
-      {selectedLineNumbers.includes(2) && layerVisibility.isTrainLayerVisible && (
-        <Line2Service zoom={zoom} requestedTrain={requestedTrain} pulse={pulse} boardOpen={station !== null} onInspect={closeStation} />
+      {canShowLine2Trains && (
+        <Line2Service zoom={zoom} requestedTrain={requestedTrain} pulse={pulse}
+          boardOpen={station !== null} onInspect={closeStation} followOnMount={followOnMount} />
       )}
       {station && selectedLineNumbers.includes(2) && <Line2StationBoard station={station} name={line2StationName(station.name)}
         showTrains={layerVisibility.isTrainLayerVisible} onClose={closeStation} />}

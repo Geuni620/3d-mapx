@@ -25,6 +25,7 @@ interface SubwayLineInspectorProps {
   dispatchLayerVisibility: Dispatch<SubwayLayerVisibilityAction>;
   visualLevel: SubwayVisualLevel;
   zoom: number;
+  onToggleTrainLayer: () => void;
   className?: string;
 }
 
@@ -35,6 +36,7 @@ export function SubwayLineInspector({
   dispatchLayerVisibility,
   visualLevel,
   zoom,
+  onToggleTrainLayer,
   className,
 }: SubwayLineInspectorProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -75,6 +77,7 @@ export function SubwayLineInspector({
       <SubwayLayerVisibilityEditor
         layerVisibility={layerVisibility}
         dispatchLayerVisibility={dispatchLayerVisibility}
+        onToggleTrainLayer={onToggleTrainLayer}
         visualLevel={visualLevel}
         zoom={zoom}
       />

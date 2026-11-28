@@ -13,6 +13,7 @@ import { Line2FleetOverview } from "./line-2-fleet-overview";
 import { Line2FollowCard } from "./line-2-follow-card";
 import { Line2TrainMarker } from "./line-2-train-marker";
 import { line2DirectionName } from "../features/subway/line-2-presentation";
+import { createSubwayTrainCameraFollower } from "../features/subway/subway-train-camera-follow";
 import { focusSubwayTrain } from "../features/subway/subway-train-camera";
 import { SUBWAY_TRAIN_CAR_SPACING_METERS } from "../features/subway/subway-train-dimensions";
 import { LINE_2_MAIN_CAR_COUNT } from "../features/subway/subway-train-model";
@@ -28,9 +29,9 @@ const bounds = SEOUL_SUBWAY_OSM_NETWORK.serviceRoutes
   .reduce((box, p) => box.extend(p), new LngLatBounds());
 DEPOTS.forEach((d) => bounds.extend([d.longitude, d.latitude]));
 
-export function Line2Service({ zoom, requestedTrain, pulse, boardOpen, onInspect }: {
+export function Line2Service({ zoom, requestedTrain, pulse, boardOpen, onInspect, followOnMount }: {
   zoom: number; pulse: boolean; requestedTrain: { id: string | null } | null;
-  boardOpen: boolean; onInspect: () => void;
+  boardOpen: boolean; onInspect: () => void; followOnMount: boolean;
 }) {
   const clock = useTrainClockStore();
   const { time } = useTrainTime();
@@ -86,6 +87,9 @@ export function Line2Service({ zoom, requestedTrain, pulse, boardOpen, onInspect
     if (!map || !following || !selected || boardOpen) return;
     const train = selected;
     const project = createSubwayScreenProjector(map);
+    const follower = createSubwayTrainCameraFollower();
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+    let previousTime: number | undefined;
     let frame = 0;
     const cancel = () => {
       setFollowing(false);
@@ -94,12 +98,23 @@ export function Line2Service({ zoom, requestedTrain, pulse, boardOpen, onInspect
     const escape = (event: KeyboardEvent) => {
       if (event.key === "Escape") cancel();
     };
-    function follow() {
+    const zoomStart = (event: { originalEvent?: unknown }) => {
+      if (event.originalEvent) setFollowing(false);
+    };
+    function follow(frameTime: number) {
       frame = requestAnimationFrame(follow);
       if (document.hidden || map!.isMoving() || map!.isEasing()) return;
-      const motion = train.getMotion(clock.now());
+      const time = clock.now();
+      const { playing, rate } = clock.getSnapshot();
+      // 일시정지나 탐색 직후, 고배속에서는 화면을 현재 운행 위치에 바로 맞춘다.
+      if (!playing || rate !== 1 || reducedMotion.matches ||
+          (previousTime !== undefined && (time < previousTime || time - previousTime > 1000))) {
+        follower.reset();
+      }
+      previousTime = time;
+      const motion = train.getMotion(time);
       const distance = motion.frontDistanceMeters - (LINE_2_MAIN_CAR_COUNT - 1) * SUBWAY_TRAIN_CAR_SPACING_METERS / 2;
-      const { coordinate } = train.sampler.sample(distance);
+      const coordinate = follower.next(train.sampler.sample(distance).coordinate, frameTime);
       const elevation = train.sampler.elevationAt?.(distance) ?? 0;
       const point = project(coordinate, elevation);
       const center = map!.transform.centerPoint;
@@ -108,11 +123,13 @@ export function Line2Service({ zoom, requestedTrain, pulse, boardOpen, onInspect
       map!.easeTo({ center: coordinate, offset: subwayCameraOffset(map!, coordinate, elevation, view), duration: 0 });
     }
     map.on("dragstart", cancel);
+    map.on("zoomstart", zoomStart);
     window.addEventListener("keydown", escape);
     frame = requestAnimationFrame(follow);
     return () => {
       cancelAnimationFrame(frame);
       map.off("dragstart", cancel);
+      map.off("zoomstart", zoomStart);
       window.removeEventListener("keydown", escape);
     };
   }, [mapRef, following, selected, clock, boardOpen]);
@@ -146,7 +163,7 @@ export function Line2Service({ zoom, requestedTrain, pulse, boardOpen, onInspect
       initialized.current = true;
       const query = new URLSearchParams(location.search);
       const trains = getScheduledFleet(clock.now());
-      if (query.get("view") === "line2" && trains.length) {
+      if ((followOnMount || query.get("view") === "line2") && trains.length) {
         const first =
           trains.find(
             (t) =>
@@ -155,7 +172,7 @@ export function Line2Service({ zoom, requestedTrain, pulse, boardOpen, onInspect
           ) ?? trains[0];
         inspect(first, false);
       } else if (
-        !(import.meta.env.DEV && query.get("debug") === "1") ||
+        followOnMount || !(import.meta.env.DEV && query.get("debug") === "1") ||
         query.get("view") === "network"
       )
         overview(false);
@@ -169,7 +186,7 @@ export function Line2Service({ zoom, requestedTrain, pulse, boardOpen, onInspect
     return () => {
       map.off("load", initialize);
     };
-  }, [mapRef, inspect, overview, clock]);
+  }, [mapRef, inspect, overview, clock, followOnMount]);
   const outer = fleet.filter((t) => t.direction === "outer-loop").length;
   return (
     <>

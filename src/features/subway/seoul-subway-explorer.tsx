@@ -10,6 +10,7 @@ import {
   createInitialSelectedLineNumberSet,
   getSelectedLineNumbers,
   selectedLineNumberSetReducer,
+  type SubwayLineSelectionAction,
 } from "./subway-line-selection";
 import {
   createInitialSubwayLayerVisibility,
@@ -59,6 +60,7 @@ export function SeoulSubwayExplorer() {
     createInitialSubwayLayerVisibility,
   );
   const [zoom, setZoom] = useState(INITIAL_VIEW_STATE.zoom);
+  const [followOnMount, setFollowOnMount] = useState(false);
   const [preference, setPreference] = useState<MapThemePreference>(() => pulseRequested() ? "dark" : readThemePreference());
   const [pulseEnabled, setPulseEnabled] = useState(readPulsePreference);
   const [clock] = useState(() => createTrainClock());
@@ -106,6 +108,23 @@ export function SeoulSubwayExplorer() {
   );
   const visualLevel = createSubwayVisualLevel(zoom);
 
+  function selectLines(action: SubwayLineSelectionAction) {
+    setFollowOnMount(false);
+    dispatchSelectedLineNumberSet(action);
+  }
+
+  function toggleTrainLayer() {
+    dispatchLayerVisibility({ type: "toggle-train-layer" });
+    const enabling = !layerVisibility.isTrainLayerVisible;
+    setFollowOnMount(enabling);
+    if (enabling) {
+      dispatchSelectedLineNumberSet({ type: "select-only", lineNumber: 2 });
+      if (!layerVisibility.isRouteLayerVisible) {
+        dispatchLayerVisibility({ type: "toggle-route-layer" });
+      }
+    }
+  }
+
   return (
     <div className="relative h-screen w-screen subway-map" data-map-theme={theme}>
       <TrainClock.Provider value={clock}>
@@ -116,6 +135,7 @@ export function SeoulSubwayExplorer() {
           zoom={zoom}
           theme={theme}
           pulse={pulse}
+          followOnMount={followOnMount}
           onZoomChange={setZoom}
         />
         <ReplayDock />
@@ -138,9 +158,10 @@ export function SeoulSubwayExplorer() {
       {debug && <SubwayLineInspector
         className="absolute left-4 top-4 z-10"
         selectedLineNumberSet={selectedLineNumberSet}
-        dispatchSelectedLineNumberSet={dispatchSelectedLineNumberSet}
+        dispatchSelectedLineNumberSet={selectLines}
         layerVisibility={layerVisibility}
         dispatchLayerVisibility={dispatchLayerVisibility}
+        onToggleTrainLayer={toggleTrainLayer}
         visualLevel={visualLevel}
         zoom={zoom}
       />}
