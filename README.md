@@ -1,5 +1,9 @@
 # React + TypeScript + Vite
 
+## 연도별 지하철 소요시간
+
+상단 `소요시간`을 켜고 지도에서 출발·도착을 차례로 누르면(역 또는 임의 지점) 2026·2030·2040 소요시간과 보행·대기·차내·환승 분해를 볼 수 있습니다. 공유 링크 예: `/?od=별내,상봉&year=2040`.
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:
