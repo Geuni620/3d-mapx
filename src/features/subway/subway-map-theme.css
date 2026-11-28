@@ -131,3 +131,10 @@
 }
 
 .subway-pulse-toggle:focus-visible { outline: 2px solid var(--map-control-accent); }
+
+.subway-travel-toggle[aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--map-control-accent); }
+/* 소요시간 토글이 들어간 상단 컨트롤이 좁은 폰에서 줄바꿈되지 않게 한다. */
+.subway-theme-options button { white-space: nowrap; }
+@media (max-width: 440px) {
+  .subway-theme-status { display: none; }
+}
