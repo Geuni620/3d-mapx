@@ -276,6 +276,7 @@
 .travel-included li[data-future]::before { box-shadow: 0 0 0 2px color-mix(in srgb, var(--leg-color) 35%, transparent); }
 .travel-included li[data-unrouted] { border-style: dashed; color: var(--replay-muted); }
 .travel-included li[data-used] { border-color: var(--leg-color); }
+.travel-included li[data-assumed]::after { content: "가정값"; margin-left: 2px; color: var(--travel-badge-assumed); font-size: 9.5px; font-weight: 750; }
 .travel-limit {
   padding: 8px 10px;
   border-left: 3px solid var(--travel-badge-assumed);

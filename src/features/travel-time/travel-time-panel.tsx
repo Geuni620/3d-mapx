@@ -19,6 +19,7 @@ import {
   type TravelParameter,
 } from "./travel-time-parameters";
 import { describeOpening, isLineOpen, TRAVEL_YEARS, type TravelYear } from "./travel-years";
+import { REGIONAL_CSV_NAMES } from "./travel-regional";
 
 
 export interface YearResult {
@@ -48,7 +49,49 @@ const TRANSFER_RULE_LABELS: Record<TransferRule, string> = {
   fallback: "환승 가정값(코레일 구간 등 거리 미확보)",
 };
 
-const LIMIT_NOTE = "2026 기준망은 1~8호선뿐입니다. 경춘선·경의중앙선·9호선·신분당선·수인분당선·GTX-A 운행 구간 등이 빠져 있어, 그 노선이 유리한 구간은 2026 시간이 길게 나옵니다.";
+function limitNote(network: TravelNetwork) {
+  const byKind = (status: string) => network.regionalLines
+    .filter(line => network.regionalParameters.get(line.id)?.status === status)
+    .map(line => line.shortName);
+  const assumed = byKind("가정값");
+  return [
+    `기준망은 1~8호선과 수도권 광역·도시철도 ${network.regionalLines.length}개 노선입니다. GTX-A·에버라인을 뺀 노선은 공표 시간표로 역간 시간과 배차를 계산합니다.`,
+    assumed.length ? `${assumed.join("·")}은 시간표가 없어 일부 값이 가정값입니다.` : "",
+    "광역철도끼리 환승은 거리 자료가 없어 150초 가정값이고, OSM에 정차 정보가 빠진 역(GTX-A 성남, 공항철도 디지털미디어시티)은 출발·도착으로 고를 수 없습니다.",
+  ].filter(Boolean).join(" ");
+}
+
+function RegionalLineBasis({ network, id }: { network: TravelNetwork; id: string }) {
+  const line = network.regionalLines.find(item => item.id === id)!;
+  const basis = network.regionalParameters.get(id)!;
+  return (
+    <li className="travel-basis-line" style={{ "--leg-color": line.color } as CSSProperties}>
+      <div className="travel-basis-head">
+        <span className="travel-line-dot" aria-hidden="true" />
+        <span>{line.name}</span>
+        <StatusBadge status={basis.status} />
+      </div>
+      <p>
+        선형·역: <a href={`https://www.openstreetmap.org/relation/${line.osm.routeMasterIds[0]}`} target="_blank" rel="noreferrer">
+          OSM route_master {line.osm.routeMasterIds.join(", ")}</a> ({line.osm.fetchedAt} 수집, 계통 {line.services.length}개 · 역 {line.stations.length}개)
+        {line.operator ? ` · 운영 ${line.operator}` : ""}
+      </p>
+      {basis.kind === "timetable" ? (
+        <p>
+          차내시간·배차: <a href={basis.timing.source.url} target="_blank" rel="noreferrer">{basis.timing.source.title}</a> (기준일 {basis.timing.source.dataDate})
+          {" "}— 역간 시간 중앙값, 시간대별 출발 열차 수{basis.timing.source.satFromHoliday ? " · 토요일은 휴일 시간표" : ""}
+        </p>
+      ) : basis.groups.map(group => [group.timing, group.speed, group.headway].filter((row): row is TravelParameter => Boolean(row)).map(row => (
+        <p key={`${group.label}-${row.label}`}>
+          {row.label} <b>{row.value}{row.unit === "분" ? "" : " "}{row.unit}</b> · {row.status}
+          {row.sourceLabel ? <> · {row.sourceUrl ? <a href={row.sourceUrl} target="_blank" rel="noreferrer">{row.sourceLabel}</a> : row.sourceLabel}</> : null}
+          {row.note ? ` — ${row.note}` : ""}
+        </p>
+      )))}
+      <p>환승: {REGIONAL_CSV_NAMES[id] ? "1~8호선과는 서울교통공사 환승역거리, 그 밖은 150초 가정값" : "150초 가정값"}</p>
+    </li>
+  );
+}
 
 function StatusBadge({ status }: { status: ParameterStatus | "보도 기준" | "개통연도 미정" | "목표" }) {
   return <span className="travel-badge" data-status={status}>{status}</span>;
@@ -147,7 +190,7 @@ function LegList({ route, network }: { route: TravelRoute; network: TravelNetwor
         const service = network.services.get(leg.service)!;
         return (
           <li key={index} className="travel-leg" data-kind="ride" style={{ "--leg-color": service.color } as CSSProperties}>
-            <span className="travel-leg-chip" aria-hidden="true">{service.future ? service.label : service.id}</span>
+            <span className="travel-leg-chip" aria-hidden="true">{service.future || service.regional ? service.label : service.id}</span>
             <div>
               <b>{platformName(network, leg.fromPlatform)} → {platformName(network, leg.toPlatform)}</b>
               <small>
@@ -224,7 +267,8 @@ export function TravelTimePanel({
     FUTURE_SERVICE.gtx.headway as TravelParameter,
     network.assumptions.metroSpeed,
     network.assumptions.metroHeadway,
-    ...Object.values(FUTURE_SERVICE_OVERRIDES).flatMap(override => override.speed ? [override.speed] : []),
+    ...Object.values(FUTURE_SERVICE_OVERRIDES).flatMap(override => [override.speed, override.timing?.parameter].filter((row): row is TravelParameter => Boolean(row))),
+    ...[...network.futureSpeeds.values()].filter(speed => speed.status !== "가정값"),
   ];
 
   return (
@@ -324,6 +368,16 @@ export function TravelTimePanel({
               const service = network.services.get(String(line))!;
               return <li key={line} style={{ "--leg-color": service.color } as CSSProperties}>{service.label}</li>;
             })}
+            {network.regionalLines.map(line => {
+              const basis = network.regionalParameters.get(line.id)!;
+              return (
+                <li key={line.id} style={{ "--leg-color": line.color } as CSSProperties}
+                  data-assumed={basis.status === "가정값" ? "" : undefined}
+                  title={basis.kind === "timetable" ? `공표 시간표 ${basis.timing.source.dataDate}` : `노선별 출처값 · ${basis.status}`}>
+                  {line.shortName}
+                </li>
+              );
+            })}
             {openLines.map(line => (
               <li key={line.id} style={{ "--leg-color": line.color } as CSSProperties}
                 data-future="" data-unrouted={line.routing.enabled ? undefined : ""}
@@ -333,7 +387,7 @@ export function TravelTimePanel({
               </li>
             ))}
           </ul>
-          <p className="travel-limit">{LIMIT_NOTE}</p>
+          <p className="travel-limit">{limitNote(network)}</p>
         </div>
 
         <details className="travel-basis">
@@ -350,6 +404,11 @@ export function TravelTimePanel({
           <h4>장래선 운행 가정 <small>{band.label}</small></h4>
           <ul className="travel-basis-list">
             {futureParameters.map(parameter => <ParameterRow key={parameter.label} parameter={parameter} />)}
+          </ul>
+          <h4>기준망 노선별 출처 <small>1~8호선 밖</small></h4>
+          <p>1~8호선은 서울교통공사 운행시각표({BASE_GRAPH.edition})로 역간 시간·시간대별 배차를 계산합니다. 아래 노선은 OSM 선로 거리에 노선별 표정속도·배차를 적용합니다.</p>
+          <ul className="travel-basis-list">
+            {network.regionalLines.map(line => <RegionalLineBasis key={line.id} network={network} id={line.id} />)}
           </ul>
           <h4>보행속도 민감도 (참고)</h4>
           <ul className="travel-basis-list">
@@ -401,7 +460,7 @@ export function TravelYearDock({ year, onYear, showReference, onShowReference }:
               {line.shortName}<small data-badge={opening.badge}>{opening.badge === "목표" ? line.opening.year : opening.badge === "보도 기준" ? `보도 ${line.opening.reportedYear}` : "미정"}</small>
             </span>
           );
-        }) : <span className="travel-year-none">현재 운행 1~8호선 기준</span>}
+        }) : <span className="travel-year-none">현재 운행 기준망(1~9호선·광역·도시철도)</span>}
       </div>
       <label className="travel-reference-toggle">
         <input type="checkbox" checked={showReference} onChange={event => onShowReference(event.target.checked)} />

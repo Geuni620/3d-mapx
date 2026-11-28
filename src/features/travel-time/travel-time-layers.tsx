@@ -58,6 +58,28 @@ function stationFeatures(lines: FutureLine[], year: TravelYear, showReference: b
   };
 }
 
+// 1~8호선 밖 기준망 노선. 1~8호선은 기존 지도 레이어가 이미 그린다.
+function regionalFeatures(network: TravelNetwork) {
+  const seen = new Set<string>();
+  const lines = [];
+  const stations = [];
+  for (const line of network.regionalLines) {
+    for (const run of line.runs) {
+      const key = [run.from, run.to].sort().join("|");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      lines.push({ type: "Feature" as const, properties: { color: line.color }, geometry: { type: "LineString" as const, coordinates: run.path } });
+    }
+    for (const station of line.stations) {
+      stations.push({ type: "Feature" as const, properties: { name: station.name, color: line.color }, geometry: { type: "Point" as const, coordinates: station.coordinate } });
+    }
+  }
+  return {
+    lines: { type: "FeatureCollection" as const, features: lines },
+    stations: { type: "FeatureCollection" as const, features: stations },
+  };
+}
+
 function routeFeatures(route: TravelRoute | null, network: TravelNetwork) {
   return {
     type: "FeatureCollection" as const,
@@ -106,7 +128,20 @@ export function TravelTimeLayers({ lines, year, showReference, route, network, t
   const originCoordinate = endpointCoordinate(origin, network);
   const destinationCoordinate = endpointCoordinate(destination, network);
 
+  const regional = regionalFeatures(network);
+
   return <>
+    <Source id="travel-regional-lines" type="geojson" data={regional.lines}>
+      <Layer id="travel-regional-line" type="line" layout={{ "line-cap": "round", "line-join": "round" }}
+        paint={{ "line-color": ["get", "color"], "line-width": ["interpolate", ["linear"], ["zoom"], 9, 1.6, 14, 3.4], "line-opacity": 0.85 }} />
+    </Source>
+    <Source id="travel-regional-stations" type="geojson" data={regional.stations}>
+      <Layer id="travel-regional-station" type="circle" minzoom={10.5}
+        paint={{ "circle-radius": 3, "circle-color": dark ? "#0b1411" : "#ffffff", "circle-stroke-color": ["get", "color"], "circle-stroke-width": 1.6 }} />
+      <Layer id="travel-regional-station-label" type="symbol" minzoom={12.5}
+        layout={{ "text-field": ["get", "name"], "text-font": ["Noto Sans Regular"], "text-size": 11, "text-offset": [0.8, -0.8], "text-anchor": "left", "text-optional": true }}
+        paint={{ "text-color": dark ? "#d8efe8" : "#25352f", "text-halo-color": dark ? "#020403" : "#fffdf3", "text-halo-width": 1.2 }} />
+    </Source>
     <Source id="travel-future-lines" type="geojson" data={lineFeatures(lines, year, showReference)}>
       <Layer id="travel-future-reference" type="line" filter={["==", ["get", "state"], "reference"]}
         layout={{ "line-cap": "round" }}
