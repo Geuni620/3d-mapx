@@ -28,7 +28,7 @@
   --travel-badge-unknown: #5d6b66;
 }
 
-.subway-map[data-travel] :is(.line2-service-panel, .line2-follow-card, .night-pulse-hud) { display: none; }
+.subway-map[data-travel] :is(.line2-service-panel, .line2-follow-card, .night-pulse-hud, .line1-map-legend, .line1-card) { display: none; }
 
 .sr-only {
   position: absolute;
