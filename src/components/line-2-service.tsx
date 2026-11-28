@@ -1,4 +1,4 @@
-import { useTrainClock } from "../features/night-pulse/train-clock";
+import { useTrainClockStore, useTrainTime } from "../features/night-pulse/train-clock";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LngLatBounds } from "maplibre-gl";
 import { Marker, useMap } from "react-map-gl/maplibre";
@@ -10,6 +10,13 @@ import {
   DETAIL_END,
 } from "../features/subway/line-2-main-simulation";
 import { Line2FleetOverview } from "./line-2-fleet-overview";
+import { Line2FollowCard } from "./line-2-follow-card";
+import { Line2TrainMarker } from "./line-2-train-marker";
+import { line2DirectionName } from "../features/subway/line-2-presentation";
+import { createSubwayTrainCameraFollower } from "../features/subway/subway-train-camera-follow";
+import { focusSubwayTrain } from "../features/subway/subway-train-camera";
+import { SUBWAY_TRAIN_CAR_SPACING_METERS } from "../features/subway/subway-train-dimensions";
+import { LINE_2_MAIN_CAR_COUNT } from "../features/subway/subway-train-model";
 import "./line-2-service.css";
 
 const DEPOTS = [
@@ -21,71 +28,31 @@ const bounds = SEOUL_SUBWAY_OSM_NETWORK.serviceRoutes
   .flatMap((r) => r.path)
   .reduce((box, p) => box.extend(p), new LngLatBounds());
 DEPOTS.forEach((d) => bounds.extend([d.longitude, d.latitude]));
-const labels = { accelerating: "가속", cruising: "정속", braking: "감속", dwelling: "정차" };
-const directionName = (train: ScheduledTrain) =>
-  train.direction === "inner-loop" ? "내선" : "외선";
 
-export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
-  pulse: boolean; zoom: number; requestedTrain: { id: string } | null; frozen: number | null;
+export function Line2Service({ zoom, requestedTrain, pulse, boardOpen, onInspect, followOnMount, selectedId, select }: {
+  zoom: number; pulse: boolean; requestedTrain: { id: string | null } | null;
+  selectedId: string | null; select: (id: string | null) => void;
+  boardOpen: boolean; onInspect: () => void; followOnMount: boolean;
 }) {
-  const clock = useTrainClock();
+  const clock = useTrainClockStore();
+  const { time } = useTrainTime();
   const { current: mapRef } = useMap();
-  const [fleet, setFleet] = useState(() => getScheduledFleet(frozen ?? clock()));
-  const [selectedId, select] = useState<string | null>(null);
+  const fleet = getScheduledFleet(time);
+  const [following, setFollowing] = useState(false);
   const [depot, setDepot] = useState<string | null>(null);
   const overviewSurface = useRef<HTMLDivElement>(null);
-  const speed = useRef<HTMLOutputElement>(null);
   const selected = fleet.find((t) => t.id === selectedId);
   useEffect(() => {
     if (!requestedTrain) return;
     select(requestedTrain.id);
+    setFollowing(requestedTrain.id !== null);
     setDepot(null);
-  }, [requestedTrain]);
-  useEffect(() => {
-    const refresh = () => {
-      const next = getScheduledFleet(frozen ?? clock());
-      setFleet((old) =>
-        old.length === next.length && old.every((v, i) => v === next[i]) ? old : next,
-      );
-    };
-    refresh();
-    if (frozen !== null) return;
-    const timer = window.setInterval(refresh, 1000);
-    document.addEventListener("visibilitychange", refresh);
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", refresh);
-    };
-  }, [frozen, clock]);
+  }, [requestedTrain, select]);
   useEffect(() => {
     if (!selectedId || selected) return;
     select(null);
-  }, [selectedId, selected]);
-  useEffect(() => {
-    const map = mapRef?.getMap();
-    if (!selected || !map) return;
-    const update = () => {
-      const now = frozen ?? clock();
-      const state = selected.getLeadPose(now);
-      const event = selected.getStopEvent(now);
-      const stopped = event && now < event.departureMs;
-      const stationText = event
-        ? stopped
-          ? `${event.station}역 정차 · 출발까지 ${Math.ceil((event.departureMs - now) / 1000)}초`
-          : `${event.station}역 출발`
-        : "";
-      const speedText = `${labels[state.motion]} · ${Math.round(state.speedMetersPerSecond * 3.6)} km/h 추정`;
-      const text = stationText
-        ? stopped
-          ? stationText
-          : `${stationText} · ${speedText}`
-        : speedText;
-      if (speed.current && speed.current.value !== text) speed.current.value = text;
-    };
-    update();
-    const timer = frozen === null ? window.setInterval(update, 150) : undefined;
-    return () => clearInterval(timer);
-  }, [selected, frozen, mapRef, clock]);
+    setFollowing(false);
+  }, [selectedId, selected, select]);
   useEffect(() => {
     const map = mapRef?.getMap();
     if (!map) return;
@@ -103,38 +70,76 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
     (train: ScheduledTrain, animate = true) => {
       const map = mapRef?.getMap();
       if (!map) return;
+      onInspect();
       select(train.id);
+      setFollowing(true);
       setDepot(null);
-      const now = frozen ?? clock();
-      const goal = train.getLeadPose(now).lead;
-      const targetPixels = createSubwayScreenProjector(map)(goal.coordinate, train.sampler.elevationAt?.(goal.distanceMeters));
-      const container = map.getContainer();
-      const travel = Math.hypot(
-        targetPixels.x - container.clientWidth / 2,
-        targetPixels.y - container.clientHeight / 2,
-      );
-      const screens = travel / Math.max(1, container.clientWidth);
-      const duration =
-        animate && frozen === null
-          ? Math.min(3200, 720 + 260 * Math.abs(18.25 - map.getZoom()) + 160 * Math.min(5, screens))
-          : 0;
-      const { lead } = train.getLeadPose(frozen ?? clock() + duration);
-      const view = { zoom: 18.25, pitch: 55, bearing: map.getBearing() };
-      // 방위를 유지한 채 선택 지점으로 접근해 같은 선로 위의 열차를 계속 읽게 한다.
-      map.easeTo({
-        ...view,
-        center: lead.coordinate,
-        offset: subwayCameraOffset(map, lead.coordinate, train.sampler.elevationAt?.(lead.distanceMeters) ?? 0, view),
-        duration,
-        easing: (t) => t * t * t * (t * (6 * t - 15) + 10),
-      });
+      focusSubwayTrain(map, LINE_2_MAIN_CAR_COUNT, (offset) => ({
+        sampler: train.sampler,
+        frontDistanceMeters: train.getMotion(clock.forecast(offset)).frontDistanceMeters,
+      }), animate && !matchMedia("(prefers-reduced-motion: reduce)").matches);
     },
-    [mapRef, frozen, clock],
+    [mapRef, clock, onInspect, select],
   );
+
+  useEffect(() => {
+    const map = mapRef?.getMap();
+    if (!map || !following || !selected || boardOpen) return;
+    const train = selected;
+    const project = createSubwayScreenProjector(map);
+    const follower = createSubwayTrainCameraFollower();
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+    let previousTime: number | undefined;
+    let frame = 0;
+    const cancel = () => {
+      setFollowing(false);
+      if (map.isEasing()) map.stop();
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") cancel();
+    };
+    const zoomStart = (event: { originalEvent?: unknown }) => {
+      if (event.originalEvent) setFollowing(false);
+    };
+    function follow(frameTime: number) {
+      frame = requestAnimationFrame(follow);
+      if (document.hidden || map!.isMoving() || map!.isEasing()) return;
+      const time = clock.now();
+      const { playing, rate } = clock.getSnapshot();
+      // 일시정지나 탐색 직후, 고배속에서는 화면을 현재 운행 위치에 바로 맞춘다.
+      if (!playing || rate !== 1 || reducedMotion.matches ||
+          (previousTime !== undefined && (time < previousTime || time - previousTime > 1000))) {
+        follower.reset();
+      }
+      previousTime = time;
+      const motion = train.getMotion(time);
+      const distance = motion.frontDistanceMeters - (LINE_2_MAIN_CAR_COUNT - 1) * SUBWAY_TRAIN_CAR_SPACING_METERS / 2;
+      const coordinate = follower.next(train.sampler.sample(distance).coordinate, frameTime);
+      const elevation = train.sampler.elevationAt?.(distance) ?? 0;
+      const point = project(coordinate, elevation);
+      const center = map!.transform.centerPoint;
+      if (Math.hypot(point.x - center.x, point.y - center.y) < 1) return;
+      const view = { zoom: map!.getZoom(), pitch: map!.getPitch(), bearing: map!.getBearing() };
+      map!.easeTo({ center: coordinate, offset: subwayCameraOffset(map!, coordinate, elevation, view), duration: 0 });
+    }
+    map.on("dragstart", cancel);
+    map.on("zoomstart", zoomStart);
+    window.addEventListener("keydown", escape);
+    frame = requestAnimationFrame(follow);
+    return () => {
+      cancelAnimationFrame(frame);
+      map.off("dragstart", cancel);
+      map.off("zoomstart", zoomStart);
+      window.removeEventListener("keydown", escape);
+    };
+  }, [mapRef, following, selected, clock, boardOpen]);
+  useEffect(() => { if (boardOpen) setFollowing(false); }, [boardOpen]);
+
   const overview = useCallback(
     (animate = true) => {
       const map = mapRef?.getMap();
       if (!map) return;
+      setFollowing(false);
       const debug =
         import.meta.env.DEV && new URLSearchParams(location.search).get("debug") === "1";
       const left = debug && map.getContainer().clientWidth >= 768 ? 282 : 38;
@@ -144,10 +149,10 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
         pitch: 0,
         bearing: 0,
         linear: true,
-        duration: animate && frozen === null ? 1000 : 0,
+        duration: animate && !matchMedia("(prefers-reduced-motion: reduce)").matches ? 1000 : 0,
       });
     },
-    [mapRef, frozen],
+    [mapRef],
   );
   const initialized = useRef(false);
   useEffect(() => {
@@ -157,17 +162,17 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
       if (initialized.current) return;
       initialized.current = true;
       const query = new URLSearchParams(location.search);
-      const trains = getScheduledFleet(frozen ?? clock());
-      if (query.get("view") === "line2" && trains.length) {
+      const trains = getScheduledFleet(clock.now());
+      if ((followOnMount || query.get("view") === "line2") && trains.length) {
         const first =
           trains.find(
             (t) =>
               t.direction === "outer-loop" &&
-              t.getMotion(frozen ?? clock()).speedMetersPerSecond > 3,
+              t.getMotion(clock.now()).speedMetersPerSecond > 3,
           ) ?? trains[0];
         inspect(first, false);
       } else if (
-        !(import.meta.env.DEV && query.get("debug") === "1") ||
+        followOnMount || !(import.meta.env.DEV && query.get("debug") === "1") ||
         query.get("view") === "network"
       )
         overview(false);
@@ -181,7 +186,7 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
     return () => {
       map.off("load", initialize);
     };
-  }, [mapRef, frozen, inspect, overview, clock]);
+  }, [mapRef, inspect, overview, clock, followOnMount]);
   const outer = fleet.filter((t) => t.direction === "outer-loop").length;
   return (
     <>
@@ -193,8 +198,7 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
         >
           <Line2FleetOverview
             trains={fleet}
-            selectedId={selected?.id ?? null}
-            frozenTimestamp={frozen}
+            selectedId={boardOpen ? null : selected?.id ?? null}
           />
         </div>
       )}
@@ -216,6 +220,16 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
           </button>
         </Marker>
       ))}
+      {selected && !boardOpen && <>
+        {following && <Line2TrainMarker train={selected} />}
+        <Line2FollowCard train={selected} time={time} following={following} onToggle={() => {
+          if (!following) inspect(selected);
+          else {
+            setFollowing(false);
+            mapRef?.getMap().stop();
+          }
+        }} />
+      </>}
       <section className="line2-service-panel" aria-label="2호선 본선">
         <header className="line2-service-header">
           <h2>2호선 본선</h2>
@@ -231,7 +245,7 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
             onChange={(e) => {
               const t = fleet.find((t) => t.id === e.target.value);
               if (t) inspect(t);
-              else select(null);
+              else { select(null); setFollowing(false); mapRef?.getMap().stop(); }
             }}
           >
             <option value="">열차 선택</option>
@@ -241,7 +255,7 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
                   .filter((t) => t.direction === dir)
                   .map((t) => (
                     <option key={t.id} value={t.id}>
-                      {directionName(t)} {t.number}
+                      {line2DirectionName(t)} {t.number}
                     </option>
                   ))}
               </optgroup>
@@ -256,7 +270,6 @@ export function Line2Service({ zoom, requestedTrain, frozen, pulse }: {
             순환선 전체
           </button>
         </div>
-        {selected && <output ref={speed} aria-label="선택 열차의 추정 속도" aria-live="off" />}
         <footer className="line2-service-sources">
           <a href="https://www.data.go.kr/data/15098251/fileData.do" target="_blank" rel="noreferrer">
             시간표 기준 추정

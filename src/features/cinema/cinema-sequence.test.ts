@@ -53,6 +53,8 @@ describe("시간표 열차 시퀀스", () => {
     expect(front).toEqual({ kind: "front", train: side.train });
     expect(nextCinemaShot(front, 20_000, side.train.arrival - 1, near())).toBe(front);
 
+    expect(nextCinemaShot(front, 9_000, time!, near(), false).kind).not.toBe("front");
+
     const transfer = nextCinemaShot(front, 20_001, side.train.arrival, near());
     expect(transfer.kind).toBe("transfer");
     if (transfer.kind !== "transfer") throw new Error("노선 전환 대상 없음");

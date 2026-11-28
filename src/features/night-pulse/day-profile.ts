@@ -15,3 +15,14 @@ export function createDayProfile(time: number) {
   const peak = points.reduce((a, b) => a.count >= b.count ? a : b);
   return { points, peak, start: points[0].timestamp, end: midnight + 1530 * 60_000 };
 }
+
+const replayProfiles = new Map<number, ReturnType<typeof createDayProfile>>();
+
+export function getReplayProfile(referenceDay: number) {
+  let profile = replayProfiles.get(referenceDay);
+  if (!profile) {
+    profile = createDayProfile(referenceDay + 5 * 3_600_000);
+    replayProfiles.set(referenceDay, profile);
+  }
+  return profile;
+}

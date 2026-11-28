@@ -4,7 +4,7 @@ import {
 } from "./subway-constants";
 
 export interface SubwayLineSelectionAction {
-  type: "toggle" | "select-all" | "clear";
+  type: "toggle" | "select-only" | "select-all" | "clear";
   lineNumber?: SubwayLineNumber;
 }
 
@@ -32,6 +32,11 @@ export function selectedLineNumberSetReducer(
       nextSelectedLineNumberSet.add(action.lineNumber);
       return nextSelectedLineNumberSet;
     }
+
+    case "select-only":
+      return action.lineNumber === undefined
+        ? selectedLineNumberSet
+        : new Set([action.lineNumber]);
 
     case "select-all":
       return createInitialSelectedLineNumberSet();

@@ -1,6 +1,6 @@
 import { readCinemaOptions, type CinemaShot } from "../cinema/cinema-sequence";
-import { formatSeoulClock, parseReplayTime, TrainClock } from "../night-pulse/train-clock";
-import { trainFrameTimestamp } from "./line-2-main-simulation";
+import { ReplayDock } from "../night-pulse/replay-dock";
+import { createTrainClock, TrainClock } from "../night-pulse/train-clock";
 import { useEffect, useMemo, useReducer, useState } from "react";
 import { INITIAL_VIEW_STATE } from "../../app/map-config";
 import { getSeoulDaylightTheme, type MapThemePreference } from "../../app/seoul-daylight";
@@ -11,6 +11,7 @@ import {
   createInitialSelectedLineNumberSet,
   getSelectedLineNumbers,
   selectedLineNumberSetReducer,
+  type SubwayLineSelectionAction,
 } from "./subway-line-selection";
 import {
   createInitialSubwayLayerVisibility,
@@ -60,29 +61,26 @@ export function SeoulSubwayExplorer() {
     createInitialSubwayLayerVisibility,
   );
   const [zoom, setZoom] = useState(INITIAL_VIEW_STATE.zoom);
+  const [followOnMount, setFollowOnMount] = useState(false);
   const [preference, setPreference] = useState<MapThemePreference>(() => pulseRequested() ? "dark" : readThemePreference());
   const [pulseEnabled, setPulseEnabled] = useState(readPulsePreference);
+  const [clock] = useState(() => createTrainClock());
+  useEffect(() => clock.start(), [clock]);
+  const [daylightTheme, setDaylightTheme] = useState(() => getSeoulDaylightTheme(Date.now()));
   const [cinema] = useState(() => readCinemaOptions(new URLSearchParams(location.search)));
   const [cinemaShot, setCinemaShot] = useState<CinemaShot | null>(null);
-  const [replay] = useState(() => {
-    const search = new URLSearchParams(location.search);
-    const wallTime = trainFrameTimestamp();
-    const target = parseReplayTime(search.get("at"), wallTime, search.get("day"));
-    return target === null ? null : { label: formatSeoulClock(target), now: () => target + trainFrameTimestamp() - wallTime };
-  });
-  const [daylightTheme, setDaylightTheme] = useState(() => getSeoulDaylightTheme(Date.now()));
-  const now = replay?.now ?? trainFrameTimestamp;
-  const [cinemaTheme, setCinemaTheme] = useState(() => getSeoulDaylightTheme(now()));
-  const theme = cinemaShot ? cinemaTheme : preference === "auto" ? daylightTheme : preference;
-  const pulse = theme === "dark" && (Boolean(cinemaShot) || pulseEnabled);
-
+  const touring = cinemaShot !== null;
+  const [cinemaTheme, setCinemaTheme] = useState(() => getSeoulDaylightTheme(clock.now()));
   useEffect(() => {
-    if (!cinemaShot) return;
-    const refresh = () => setCinemaTheme(getSeoulDaylightTheme(now()));
+    if (!touring) return;
+    const refresh = () => setCinemaTheme(getSeoulDaylightTheme(clock.now()));
     refresh();
     const timer = window.setInterval(refresh, 1000);
     return () => window.clearInterval(timer);
-  }, [now, cinemaShot]);
+  }, [clock, touring]);
+  const theme = touring ? cinemaTheme : preference === "auto" ? daylightTheme : preference;
+
+  const pulse = theme === "dark" && (touring || pulseEnabled);
   function togglePulse() {
     const enabled = !pulseEnabled;
     setPulseEnabled(enabled);
@@ -122,27 +120,43 @@ export function SeoulSubwayExplorer() {
   );
   const visualLevel = createSubwayVisualLevel(zoom);
 
+  function selectLines(action: SubwayLineSelectionAction) {
+    setFollowOnMount(false);
+    dispatchSelectedLineNumberSet(action);
+  }
+
+  function toggleTrainLayer() {
+    dispatchLayerVisibility({ type: "toggle-train-layer" });
+    const enabling = !layerVisibility.isTrainLayerVisible;
+    setFollowOnMount(enabling);
+    if (enabling) {
+      dispatchSelectedLineNumberSet({ type: "select-only", lineNumber: 2 });
+      if (!layerVisibility.isRouteLayerVisible) {
+        dispatchLayerVisibility({ type: "toggle-route-layer" });
+      }
+    }
+  }
+
   return (
-    <div className="relative h-dvh w-full subway-map"
-      data-map-theme={theme}
+    <div className="relative h-dvh w-full subway-map" data-map-theme={theme}
       data-cinema-shot={cinemaShot?.kind}
       data-cinema-bridge={cinemaShot?.kind === "side" && cinemaShot.bridge ? "" : undefined}
-      data-cinema-clean={cinemaShot && cinema.clean ? "" : undefined}
-    >
-      <TrainClock.Provider value={now}>
+      data-cinema-clean={touring && cinema.clean ? "" : undefined}>
+      <TrainClock.Provider value={clock}>
         <SeoulSubwayMap
           selectedLineNumbers={selectedLineNumbers}
           layerVisibility={layerVisibility}
           visualLevel={visualLevel}
           zoom={zoom}
-          theme={theme}
-          pulse={pulse}
-          replay={replay?.label ?? null}
           cinemaDirect={cinema.direct}
           cinemaShot={cinemaShot}
           onCinemaShot={setCinemaShot}
+          theme={theme}
+          pulse={pulse}
+          followOnMount={followOnMount}
           onZoomChange={setZoom}
         />
+        <ReplayDock />
       </TrainClock.Provider>
       <div className="subway-theme-switch">
         {preference === "auto" && (
@@ -162,9 +176,10 @@ export function SeoulSubwayExplorer() {
       {debug && <SubwayLineInspector
         className="cinema-inspector absolute left-4 top-4 z-10"
         selectedLineNumberSet={selectedLineNumberSet}
-        dispatchSelectedLineNumberSet={dispatchSelectedLineNumberSet}
+        dispatchSelectedLineNumberSet={selectLines}
         layerVisibility={layerVisibility}
         dispatchLayerVisibility={dispatchLayerVisibility}
+        onToggleTrainLayer={toggleTrainLayer}
         visualLevel={visualLevel}
         zoom={zoom}
       />}

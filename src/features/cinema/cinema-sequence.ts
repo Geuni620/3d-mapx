@@ -110,7 +110,7 @@ export function selectTransferShot(at: number, previousLine: SubwayLineNumber, n
   return best ? { kind: "transfer", train: best.train } : { kind: "orbit" };
 }
 
-export function nextCinemaShot(shot: CinemaShot, elapsed: number, time: number, near: SubwayCoordinate) {
+export function nextCinemaShot(shot: CinemaShot, elapsed: number, time: number, near: SubwayCoordinate, playing = true) {
   switch (shot.kind) {
     case "orbit":
       return elapsed >= CINEMA_ORBIT_MS ? selectTrainShot(time) : shot;
@@ -118,7 +118,8 @@ export function nextCinemaShot(shot: CinemaShot, elapsed: number, time: number, 
       if (time >= shot.train.arrival) return selectTransferShot(time, shot.train.line, near);
       return elapsed >= SIDE_MS ? { kind: "front", train: shot.train } as const : shot;
     case "front":
-      return time >= shot.train.arrival ? selectTransferShot(time, shot.train.line, near) : shot;
+      return time >= shot.train.arrival || (!playing && elapsed >= SIDE_MS)
+        ? selectTransferShot(time, shot.train.line, near) : shot;
     case "transfer":
       return elapsed >= 11_000 || time >= shot.train.arrival ? { kind: "orbit" } as const : shot;
   }

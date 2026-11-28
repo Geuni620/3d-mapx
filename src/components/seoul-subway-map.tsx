@@ -1,8 +1,7 @@
-import { CinemaTour } from "../features/cinema/cinema-tour";
+import { CinemaTour, type CinemaTrainInput } from "../features/cinema/cinema-tour";
 import type { CinemaShot } from "../features/cinema/cinema-sequence";
 import { attachNightPulseStyle } from "../features/night-pulse/night-pulse-style";
-import { useTrainClock } from "../features/night-pulse/train-clock";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LayersList } from "@deck.gl/core";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import Map, { useControl, useMap } from "react-map-gl/maplibre";
@@ -25,6 +24,10 @@ import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-i
 import { SeoulSubwayLayers } from "./seoul-subway-layers";
 import { DETAIL_START, DETAIL_END, PULSE_DETAIL_START } from "../features/subway/line-2-main-simulation";
 import { Line2Service } from "./line-2-service";
+import { Line2StationBoard } from "./line-2-station-board";
+import { line2StationName } from "../features/subway/line-2-station-board";
+import { getLine2StationDirections } from "../features/subway/line-2-timetable";
+import type { PulseStationRegion } from "../features/night-pulse/night-pulse-layer";
 
 const NightPulse = lazy(() => import("../features/night-pulse/night-pulse"));
 const EMPTY_LAYERS: LayersList = [];
@@ -37,10 +40,10 @@ interface SeoulSubwayMapProps {
   zoom: number;
   theme: MapTheme;
   pulse: boolean;
-  replay: string | null;
   cinemaDirect: boolean;
   cinemaShot: CinemaShot | null;
   onCinemaShot: (shot: CinemaShot | null) => void;
+  followOnMount: boolean;
   onZoomChange: (zoom: number) => void;
 }
 
@@ -51,25 +54,29 @@ export function SeoulSubwayMap({
   zoom,
   theme,
   pulse,
-  replay,
-  cinemaDirect,
-  cinemaShot,
-  onCinemaShot,
+  cinemaDirect, cinemaShot, onCinemaShot,
+  followOnMount,
   onZoomChange,
 }: SeoulSubwayMapProps) {
-  const now = useTrainClock();
   const [initialStyle] = useState(() => SEOUL_TRANSIT_STYLES[theme]);
-  const [requestedTrain, setRequestedTrain] = useState<{ id: string } | null>(null);
-  const [motionPausedAt, setFrozenLine2] = useState<number | null>(() =>
-    matchMedia("(prefers-reduced-motion: reduce)").matches ? now() : null,
-  );
+  const [requestedTrain, setRequestedTrain] = useState<{ id: string | null } | null>(null);
+  const [selectedTrainId, selectTrain] = useState<string | null>(null);
+  const cinemaInput = useRef<CinemaTrainInput>({});
+  const canShowLine2Trains = selectedLineNumbers.includes(2) && layerVisibility.isTrainLayerVisible;
   useEffect(() => {
-    const query = matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setFrozenLine2(query.matches ? now() : null);
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, [now]);
-  const frozenLine2 = cinemaShot ? null : motionPausedAt;
+    if (!canShowLine2Trains) {
+      setRequestedTrain(null);
+      selectTrain(null);
+    }
+  }, [canShowLine2Trains]);
+  const [station, setStation] = useState<SubwayStationMapPoint | null>(null);
+  const stationRegions = useRef<PulseStationRegion[]>([]);
+  const onStationRegions = useCallback((regions: PulseStationRegion[]) => { stationRegions.current = regions; }, []);
+  const closeStation = useCallback(() => setStation(null), []);
+  const focusTrain = useCallback((train: { id: string | null }) => {
+    if (train.id !== null) setStation(null);
+    setRequestedTrain(train);
+  }, []);
   const visibleStations = useMemo(
     () => createVisibleSubwayStations(selectedLineNumbers),
     [selectedLineNumbers],
@@ -79,6 +86,9 @@ export function SeoulSubwayMap({
     () => createSubwayDisplayStations(visibleStations),
     [visibleStations],
   );
+  const line2Stations = useMemo(() => displayStations.filter(
+    candidate => candidate.lineNumber === 2 && getLine2StationDirections(line2StationName(candidate.name)),
+  ), [displayStations]);
   const routePaths = useMemo(() => createSubwayRoutePaths(selectedLineNumbers), [selectedLineNumbers]);
   const stationCircles = useMemo(() => createSubwayStationCircles(displayStations), [displayStations]);
   const subwayDeckLayers = useMemo(
@@ -106,28 +116,62 @@ export function SeoulSubwayMap({
           onZoomChange(nextZoom);
         }
       }}
-      onZoomEnd={(event) => { if (!("cinema" in event)) onZoomChange(event.viewState.zoom); }}
+      onZoomEnd={event => { if (!("cinema" in event)) onZoomChange(event.viewState.zoom); }}
+      onClick={event => {
+        if (event.defaultPrevented || !line2Stations.length) return;
+        const { x, y } = event.point;
+        const map = event.target;
+        const byName = (name: string) => line2Stations.find(item => line2StationName(item.name) === line2StationName(name));
+        const features = map.getLayer(SUBWAY_STATION_LABEL_LAYER_ID)
+          ? map.queryRenderedFeatures(event.point, { layers: [SUBWAY_STATION_LABEL_LAYER_ID] })
+          : [];
+        // 환승역에서 지도에 남은 라벨이 다른 호선 소속이어도 같은 역의 전광판을 연다.
+        let picked = features.map(feature => byName(feature.properties.name)).find(Boolean);
+        if (!picked && layerVisibility.isStationCircleLayerVisible) {
+          if (pulse) {
+            const region = stationRegions.current.find(region =>
+              x >= region.x && x <= region.x + region.width && y >= region.y && y <= region.y + region.height,
+            );
+            if (region) picked = byName(region.name);
+          } else if (map.getZoom() > 12.4) {
+            let distance = 12;
+            for (const candidate of line2Stations) {
+              const point = map.project([candidate.longitude, candidate.latitude]);
+              const offset = Math.hypot(x - point.x, y - point.y);
+              if (offset < distance) { picked = candidate; distance = offset; }
+            }
+          }
+        }
+        if (picked) {
+          event.preventDefault();
+          setStation(picked);
+        }
+      }}
     >
       <MapThemeColors theme={theme} pulse={pulse} />
       <SeoulSubwayLayers stations={displayStations} theme={theme} />
       <DeckRouteOverlay layers={subwayDeckLayers} />
       {pulse && <Suspense fallback={null}>
-        <NightPulse replay={replay} lines={selectedLineNumbers} stations={displayStations}
-          routes={routePaths} frozenLine2={frozenLine2}
+        <NightPulse onStationRegions={onStationRegions} lines={selectedLineNumbers} stations={displayStations}
+          routes={routePaths}
           showRoutes={layerVisibility.isRouteLayerVisible}
           showStations={layerVisibility.isStationCircleLayerVisible}
           showTrains={layerVisibility.isTrainLayerVisible} />
       </Suspense>}
       {selectedLineNumbers.length > 0 && layerVisibility.isTrainLayerVisible && (
         <Suspense fallback={null}>
-          <SubwayFleetOverview selectedLines={selectedLineNumbers} onLine2Focus={setRequestedTrain}
-            frozenLine2={frozenLine2} pulse={pulse} />
+          <SubwayFleetOverview cinemaInput={cinemaInput} selectedLines={selectedLineNumbers} onLine2Focus={focusTrain} pulse={pulse} />
         </Suspense>
       )}
-      {selectedLineNumbers.includes(2) && layerVisibility.isTrainLayerVisible && (
-        <Line2Service zoom={zoom} requestedTrain={requestedTrain} frozen={frozenLine2} pulse={pulse} />
+      {canShowLine2Trains && (
+        <Line2Service zoom={zoom} requestedTrain={requestedTrain} pulse={pulse}
+          selectedId={selectedTrainId} select={selectTrain}
+          boardOpen={station !== null} onInspect={closeStation} followOnMount={followOnMount} />
       )}
-      <CinemaTour direct={cinemaDirect} shot={cinemaShot} onShot={onCinemaShot} />
+      {station && selectedLineNumbers.includes(2) && <Line2StationBoard station={station} name={line2StationName(station.name)}
+        showTrains={layerVisibility.isTrainLayerVisible} onClose={closeStation} />}
+      <CinemaTour direct={cinemaDirect} shot={cinemaShot} onShot={onCinemaShot} trainInput={cinemaInput}
+        blocked={(canShowLine2Trains && selectedTrainId !== null) || (station !== null && selectedLineNumbers.includes(2))} />
     </Map>
   );
 }

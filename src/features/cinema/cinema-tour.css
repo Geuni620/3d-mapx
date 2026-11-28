@@ -15,7 +15,7 @@
 
 .subway-map[data-cinema-clean] :is(
   .cinema-shot-status, .subway-theme-switch, .cinema-inspector,
-  .night-pulse-hud, .line2-service-panel, .line2-depot,
+  .night-pulse-hud, .replay-dock, .line2-service-panel, .line2-depot,
   .subway-train-hover-area, .subway-train-hover-tooltip
 ) { display: none; }
 

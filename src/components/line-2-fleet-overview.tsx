@@ -1,4 +1,4 @@
-import { useTrainClock } from "../features/night-pulse/train-clock";
+import { useTrainClockStore } from "../features/night-pulse/train-clock";
 import { useEffect, useRef } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import { createSubwayScreenProjector } from "../features/subway/subway-screen-projection";
@@ -12,7 +12,6 @@ import { LINE_2_MAIN_CAR_COUNT } from "../features/subway/subway-train-model";
 interface Props {
   trains: readonly ScheduledTrain[];
   selectedId: string | null;
-  frozenTimestamp: number | null;
 }
 
 const COLORS = { "outer-loop": "#b4f395", "inner-loop": "#74e1cb" };
@@ -41,8 +40,8 @@ function drawNumber(context: CanvasRenderingContext2D, head: Pixel, train: Sched
   context.fillText(label, left + 6, top + 9.5);
 }
 
-export function Line2FleetOverview({ trains, selectedId, frozenTimestamp }: Props) {
-  const now = useTrainClock();
+export function Line2FleetOverview({ trains, selectedId }: Props) {
+  const clock = useTrainClockStore();
   const { current: mapRef } = useMap();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const state = useRef({ trains, selectedId });
@@ -64,7 +63,8 @@ export function Line2FleetOverview({ trains, selectedId, frozenTimestamp }: Prop
     const lastDwell = new WeakMap<ScheduledTrain, number>();
     const project = createSubwayScreenProjector(map);
     const draw = () => {
-      const timestamp = frozenTimestamp ?? now();
+      const timestamp = clock.now();
+      const { playing } = clock.getSnapshot();
       const zoom = map.getZoom();
       context.clearRect(0, 0, viewport.width, viewport.height);
       let selection: VisibleTrain | undefined;
@@ -77,7 +77,7 @@ export function Line2FleetOverview({ trains, selectedId, frozenTimestamp }: Prop
         const dwelling = motion.phase === "dwelling";
         if (dwelling) lastDwell.set(train, timestamp);
         const sinceStop = timestamp - (lastDwell.get(train) ?? train.departureMs);
-        const departureGlow = !dwelling && frozenTimestamp === null && sinceStop >= 0
+        const departureGlow = !dwelling && playing && sinceStop >= 0
           ? Math.max(0, 1 - sinceStop / DEPARTURE_GLOW_MS) : 0;
         const item = { train, icon, dwelling, departureGlow };
         if (train.id === state.current.selectedId) selection = item;
@@ -101,21 +101,25 @@ export function Line2FleetOverview({ trains, selectedId, frozenTimestamp }: Prop
       draw();
     };
     const animate = () => {
-      draw();
+      if (clock.getSnapshot().playing) draw();
       frame = requestAnimationFrame(animate);
     };
     resize();
     repaint.current = draw;
     map.on("resize", resize);
-    if (frozenTimestamp === null) frame = requestAnimationFrame(animate);
-    else map.on("move", draw);
+    map.on("move", draw);
+    const unsubscribe = clock.subscribe(() => {
+      if (!clock.getSnapshot().playing) draw();
+    });
+    frame = requestAnimationFrame(animate);
     return () => {
       repaint.current = null;
       cancelAnimationFrame(frame);
+      unsubscribe();
       map.off("resize", resize);
       map.off("move", draw);
     };
-  }, [mapRef, frozenTimestamp, now]);
+  }, [mapRef, clock]);
 
   return <canvas ref={canvasRef} aria-hidden="true" data-testid="line-2-fleet-overview"
     style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />;
