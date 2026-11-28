@@ -16,6 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 GRAPH = ROOT / "src/features/travel-time/data/subway-travel-graph.json"
+REGIONAL_DIR = ROOT / "src/features/travel-time/data/regional"
 OUTPUT = ROOT / "src/features/travel-time/data/future-lines.json"
 SNAP_LIMIT_METERS = 1200
 
@@ -28,19 +29,42 @@ CHAINS = {
     "DOBONG_OKJEONG": [(3, False), (0, False), (1, False)],
     "GTXB": [(0, False), (2, False), (3, False)],
     "GTXC": [(4, False), (2, False), (1, False), (5, False), (6, False), (7, False)],
+    "L9EXT": [(0, False)],
+    "WOLPAN": [(3, False), (4, False), (1, False)],
+    "INDONG": [(0, False)],
 }
 
 # 경로 계산에서 제외하는 이유가 자료 밖 판단인 경우만 적는다.
 NOT_ROUTED = {
-    "L9EXT": "9호선 기존 구간이 기준망(1~8호선)에 없고 941(고덕) 환승역이 자료에 없음",
-    "WOLPAN": "자료의 정차역이 모두 신설역이라 기준망과 연결되는 환승역이 없음",
-    "INDONG": "인덕원(4호선) 쪽 선형·정차역이 자료에 없어 기준망과 연결되지 않음",
     "DAEJANG": "정거장 좌표 미확보",
     "WIRYE_TRAM": "정거장 좌표 미확보",
 }
 
 # 직결 운행: 기존 호선 종점에서 갈아타지 않고 이어 달린다.
-THROUGH_SERVICE = {"DOBONG_OKJEONG": {"line": 7, "junction": "7:장암", "before": "7:도봉산"}}
+# junction 승강장은 장래선 경로의 한 역이 되고, 같은 이름의 장래선 자체 역은 대신 빠진다(replaces).
+THROUGH_SERVICE = {
+    "DOBONG_OKJEONG": {"service": "7", "junctions": ["7:장암"]},
+    "GTXA_LINK": {"service": "GTXA", "junctions": ["GTXA:서울역", "GTXA:수서"], "replaces": ["서울역", "수서"]},
+    "SBD_HOMAESIL": {"service": "SBD", "junctions": ["SBD:광교중앙"]},
+    "L9EXT": {"service": "L9", "junctions": ["L9:중앙보훈병원"]},
+}
+
+# plans.json 정차역 목록에 없지만 근거가 있는 정차역. 기존 역 좌표를 쓰고 그 역과 환승으로 잇는다.
+EXTRA_STOPS = {
+    "WOLPAN": [
+        {"name": "월곶", "at": "SB:월곶", "basis": "노선명의 기점(월곶∼판교 복선전철)"},
+        {"name": "판교", "at": "SBD:판교", "basis": "노선명의 종점(월곶∼판교 복선전철)"},
+    ],
+    "INDONG": [
+        {"name": "인덕원", "at": "4:인덕원", "basis": "노선명의 기점(인덕원∼동탄)"},
+    ],
+    "GTXB": [
+        {"name": "청량리", "at": "1:청량리", "basis": "국토교통부 정책브리핑 2024-02-28 \"남양주 마석에서 청량리까지 … 23분\"",
+         "url": "https://www.korea.kr/news/policyNewsView.do?newsId=148926423"},
+        {"name": "서울역", "at": "1:서울역", "basis": "국토교통부 정책브리핑 2022-03-22 \"마석역에서 서울역까지 약 27분\"",
+         "url": "https://www.korea.kr/briefing/policyBriefingView.do?newsId=148900078"},
+    ],
+}
 
 # 화면 칩·범례용 짧은 이름. 9호선 4단계를 "9호선"으로만 쓰면 기존 9호선 전체로 오해된다.
 SHORT_NAMES = {
@@ -175,14 +199,18 @@ def generate(plans_path):
     plans_bytes = plans_path.read_bytes()
     plans = json.loads(plans_bytes)
     graph = json.loads(GRAPH.read_text())
-    base = graph["stations"]
+    # 기준망 승강장: 1~8호선 + 수도권 광역·도시철도
+    base = [{"id": s["id"], "name": s["complex"], "coordinate": s["coordinate"]} for s in graph["stations"]]
+    for path in sorted(REGIONAL_DIR.glob("*.json")):
+        base += [{"id": s["id"], "name": s["name"], "coordinate": s["coordinate"]} for s in json.loads(path.read_text())["stations"]]
+    by_id = {s["id"]: s for s in base}
     plan_stations = {s["id"]: s for s in plans["stations"]}
 
     def base_transfers(station):
         result = []
         for candidate in base:
             distance = haversine(candidate["coordinate"], station["coordinates"])
-            same_name = candidate["complex"] == station["name"].split("(")[0].replace(" ", "")
+            same_name = candidate["name"] == station["name"].split("(")[0].replace(" ", "")
             if (station["kind"] == "환승정차" and distance <= 500) or (same_name and distance <= 700):
                 result.append(candidate["id"])
         return result
@@ -206,6 +234,21 @@ def generate(plans_path):
                 "coordSource": s.get("coordSource"),
                 "transferTo": base_transfers(s) if s.get("coordinates") else [],
             })
+        through = THROUGH_SERVICE.get(cid)
+        if through:
+            stations = [st for st in stations if st["name"] not in through.get("replaces", [])]
+        for extra in EXTRA_STOPS.get(cid, []):
+            at = by_id[extra["at"]]
+            stop = {"name": extra["name"], "kind": "환승정차", "coordinates": at["coordinate"]}
+            stations.append({
+                "id": f"{cid}:{extra['name']}",
+                "name": extra["name"],
+                "kind": "환승정차",
+                "coordinate": at["coordinate"],
+                "coordSource": f"기존 역 좌표({extra['at']}) — {extra['basis']}",
+                "sourceUrl": extra.get("url"),
+                "transferTo": base_transfers(stop),
+            })
 
         routing = {"enabled": False, "reason": NOT_ROUTED.get(cid, "반영 기준 미충족(지도 참고 표시만)")}
         if stage == "착공" and cid in CHAINS:
@@ -220,11 +263,11 @@ def generate(plans_path):
                     excluded.append({"station": station["id"], "reason": f"경로 선형에서 {round(offset)}m 떨어짐(지선 선형 미확보)"})
                     continue
                 placed.append((along, station["id"], offset))
-            through = THROUGH_SERVICE.get(cid)
-            if through:
-                junction = next(s for s in base if s["id"] == through["junction"])
-                offset, along, _, _ = project(points, cumulative, junction["coordinate"])
-                placed.append((along, junction["id"], offset))
+            for junction_id in (through or {}).get("junctions", []):
+                offset, along, _, _ = project(points, cumulative, by_id[junction_id]["coordinate"])
+                if offset > SNAP_LIMIT_METERS:
+                    raise ValueError(f"{cid} 직결 역 {junction_id}이 선형에서 {round(offset)}m 떨어짐")
+                placed.append((along, junction_id, offset))
             placed.sort()
             segments = []
             for (a_along, a, _), (b_along, b, _) in zip(placed, placed[1:]):
