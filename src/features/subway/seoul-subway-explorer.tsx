@@ -1,3 +1,4 @@
+import { readCinemaOptions, type CinemaShot } from "../cinema/cinema-sequence";
 import { ReplayDock } from "../night-pulse/replay-dock";
 import { createTrainClock, TrainClock } from "../night-pulse/train-clock";
 import { useEffect, useMemo, useReducer, useState } from "react";
@@ -66,9 +67,20 @@ export function SeoulSubwayExplorer() {
   const [clock] = useState(() => createTrainClock());
   useEffect(() => clock.start(), [clock]);
   const [daylightTheme, setDaylightTheme] = useState(() => getSeoulDaylightTheme(Date.now()));
-  const theme = preference === "auto" ? daylightTheme : preference;
+  const [cinema] = useState(() => readCinemaOptions(new URLSearchParams(location.search)));
+  const [cinemaShot, setCinemaShot] = useState<CinemaShot | null>(null);
+  const touring = cinemaShot !== null;
+  const [cinemaTheme, setCinemaTheme] = useState(() => getSeoulDaylightTheme(clock.now()));
+  useEffect(() => {
+    if (!touring) return;
+    const refresh = () => setCinemaTheme(getSeoulDaylightTheme(clock.now()));
+    refresh();
+    const timer = window.setInterval(refresh, 1000);
+    return () => window.clearInterval(timer);
+  }, [clock, touring]);
+  const theme = touring ? cinemaTheme : preference === "auto" ? daylightTheme : preference;
 
-  const pulse = theme === "dark" && pulseEnabled;
+  const pulse = theme === "dark" && (touring || pulseEnabled);
   function togglePulse() {
     const enabled = !pulseEnabled;
     setPulseEnabled(enabled);
@@ -126,13 +138,19 @@ export function SeoulSubwayExplorer() {
   }
 
   return (
-    <div className="relative h-screen w-screen subway-map" data-map-theme={theme}>
+    <div className="relative h-dvh w-full subway-map" data-map-theme={theme}
+      data-cinema-shot={cinemaShot?.kind}
+      data-cinema-bridge={cinemaShot?.kind === "side" && cinemaShot.bridge ? "" : undefined}
+      data-cinema-clean={touring && cinema.clean ? "" : undefined}>
       <TrainClock.Provider value={clock}>
         <SeoulSubwayMap
           selectedLineNumbers={selectedLineNumbers}
           layerVisibility={layerVisibility}
           visualLevel={visualLevel}
           zoom={zoom}
+          cinemaDirect={cinema.direct}
+          cinemaShot={cinemaShot}
+          onCinemaShot={setCinemaShot}
           theme={theme}
           pulse={pulse}
           followOnMount={followOnMount}
@@ -156,7 +174,7 @@ export function SeoulSubwayExplorer() {
           onClick={togglePulse}>야간 맥박</button>
       </div>
       {debug && <SubwayLineInspector
-        className="absolute left-4 top-4 z-10"
+        className="cinema-inspector absolute left-4 top-4 z-10"
         selectedLineNumberSet={selectedLineNumberSet}
         dispatchSelectedLineNumberSet={selectLines}
         layerVisibility={layerVisibility}

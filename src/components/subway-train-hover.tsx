@@ -1,3 +1,5 @@
+import type { RefObject } from "react";
+import type { CinemaTrainInput } from "../features/cinema/cinema-tour";
 import { useTrainClockStore } from "../features/night-pulse/train-clock";
 import { useEffect, useState } from "react";
 import { useMap } from "react-map-gl/maplibre";
@@ -51,7 +53,8 @@ function distanceToIcon(point: Pixel, icon: OverviewTrainIcon) {
   return nearest;
 }
 
-export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
+export function SubwayTrainHover({ cinemaInput, selectedLines, onLine2Focus }: {
+  cinemaInput: RefObject<CinemaTrainInput>;
   selectedLines: readonly SubwayLineNumber[];
   onLine2Focus: (train: { id: string | null }) => void;
 }) {
@@ -71,8 +74,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
     let line2Trains: ReturnType<typeof getScheduledFleet> = [];
     const project = createSubwayScreenProjector(map);
 
-    const update = (): HoveredTrain | null | undefined => {
-      if (!pointer || map.isMoving()) return;
+    const pick = (pointer: Pixel): HoveredTrain | null => {
       const timestamp = clock.now();
       const second = Math.floor(timestamp / 1000);
       if (lastSecond !== second) {
@@ -135,6 +137,11 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
           },
         }));
       }
+      return closest;
+    };
+    const update = () => {
+      if (!pointer || map.isMoving()) return;
+      const closest = pick(pointer);
       canvas.style.cursor = closest ? "pointer" : "";
       setHover(closest);
       return closest;
@@ -155,6 +162,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
       const train = update();
       if (train) {
         event.preventDefault();
+        cinemaInput.current.restoreBeforeFocus?.();
         train.focus();
       } else {
         if (map.isEasing()) map.stop();
@@ -162,6 +170,8 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
       }
     };
 
+    const input = cinemaInput.current;
+    input.hasTrainAt = point => Boolean(pick(point));
     map.on("mousemove", move);
     map.on("mouseout", leave);
     map.on("click", click);
@@ -169,6 +179,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
     map.on("moveend", update);
     const timer = window.setInterval(update, 120);
     return () => {
+      delete input.hasTrainAt;
       cancelAnimationFrame(frame);
       window.clearInterval(timer);
       map.off("mousemove", move);
@@ -178,7 +189,7 @@ export function SubwayTrainHover({ selectedLines, onLine2Focus }: {
       map.off("moveend", update);
       leave();
     };
-  }, [mapRef, onLine2Focus, selectedLines, clock]);
+  }, [mapRef, onLine2Focus, selectedLines, clock, cinemaInput]);
 
   if (!hover) return null;
   const { icon, tooltip, line, origin, destination, headsign } = hover;

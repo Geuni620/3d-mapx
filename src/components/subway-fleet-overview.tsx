@@ -1,3 +1,5 @@
+import type { RefObject } from "react";
+import type { CinemaTrainInput } from "../features/cinema/cinema-tour";
 import { useTrainClock } from "../features/night-pulse/train-clock";
 import { useEffect, useRef } from "react";
 import { useMap } from "react-map-gl/maplibre";
@@ -16,7 +18,8 @@ import { drawOverviewTrainIcon, sampleOverviewTrainIcon, type Viewport } from ".
 import { createSubwayScreenProjector } from "../features/subway/subway-screen-projection";
 import { SubwayTrainHover } from "./subway-train-hover";
 
-export default function SubwayFleetOverview({ selectedLines, onLine2Focus, pulse }: {
+export default function SubwayFleetOverview({ cinemaInput, selectedLines, onLine2Focus, pulse }: {
+  cinemaInput: RefObject<CinemaTrainInput>;
   selectedLines: readonly SubwayLineNumber[];
   onLine2Focus: (train: { id: string | null }) => void;
   pulse: boolean;
@@ -123,6 +126,6 @@ export default function SubwayFleetOverview({ selectedLines, onLine2Focus, pulse
   return <>
     {!pulse && <canvas ref={canvasRef} role="img" aria-label="시간표 기준 열차 위치"
       className="pointer-events-none absolute inset-0 z-2 h-full w-full" />}
-    <SubwayTrainHover selectedLines={selectedLines} onLine2Focus={onLine2Focus} />
+    <SubwayTrainHover cinemaInput={cinemaInput} selectedLines={selectedLines} onLine2Focus={onLine2Focus} />
   </>;
 }

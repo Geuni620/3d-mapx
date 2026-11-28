@@ -29,15 +29,15 @@ const bounds = SEOUL_SUBWAY_OSM_NETWORK.serviceRoutes
   .reduce((box, p) => box.extend(p), new LngLatBounds());
 DEPOTS.forEach((d) => bounds.extend([d.longitude, d.latitude]));
 
-export function Line2Service({ zoom, requestedTrain, pulse, boardOpen, onInspect, followOnMount }: {
+export function Line2Service({ zoom, requestedTrain, pulse, boardOpen, onInspect, followOnMount, selectedId, select }: {
   zoom: number; pulse: boolean; requestedTrain: { id: string | null } | null;
+  selectedId: string | null; select: (id: string | null) => void;
   boardOpen: boolean; onInspect: () => void; followOnMount: boolean;
 }) {
   const clock = useTrainClockStore();
   const { time } = useTrainTime();
   const { current: mapRef } = useMap();
   const fleet = getScheduledFleet(time);
-  const [selectedId, select] = useState<string | null>(null);
   const [following, setFollowing] = useState(false);
   const [depot, setDepot] = useState<string | null>(null);
   const overviewSurface = useRef<HTMLDivElement>(null);
@@ -47,12 +47,12 @@ export function Line2Service({ zoom, requestedTrain, pulse, boardOpen, onInspect
     select(requestedTrain.id);
     setFollowing(requestedTrain.id !== null);
     setDepot(null);
-  }, [requestedTrain]);
+  }, [requestedTrain, select]);
   useEffect(() => {
     if (!selectedId || selected) return;
     select(null);
     setFollowing(false);
-  }, [selectedId, selected]);
+  }, [selectedId, selected, select]);
   useEffect(() => {
     const map = mapRef?.getMap();
     if (!map) return;
@@ -79,7 +79,7 @@ export function Line2Service({ zoom, requestedTrain, pulse, boardOpen, onInspect
         frontDistanceMeters: train.getMotion(clock.forecast(offset)).frontDistanceMeters,
       }), animate && !matchMedia("(prefers-reduced-motion: reduce)").matches);
     },
-    [mapRef, clock, onInspect],
+    [mapRef, clock, onInspect, select],
   );
 
   useEffect(() => {
