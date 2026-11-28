@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BASE_GRAPH, FUTURE_LINES, type BaseGraph } from "./travel-time-data";
+import { REGIONAL_LINES, REGIONAL_TIMINGS } from "./travel-regional";
 import { buildTravelNetwork, TIME_BANDS } from "./travel-network";
 import { BREAKDOWN_KEYS, findTravelRoute, waitSeconds, type TravelEndpoint } from "./travel-route";
 import { TRAVEL_PARAMETERS } from "./travel-time-parameters";
@@ -101,7 +102,7 @@ describe("다익스트라 경로 탐색", () => {
 });
 
 describe("실데이터 연도별 경로", () => {
-  const networks = TRAVEL_YEARS.map(year => buildTravelNetwork(BASE_GRAPH, FUTURE_LINES.lines, year, band));
+  const networks = TRAVEL_YEARS.map(year => buildTravelNetwork(BASE_GRAPH, FUTURE_LINES.lines, year, band, REGIONAL_LINES, REGIONAL_TIMINGS));
 
   it("프리셋 구간은 모든 연도에서 계산되고 분해 합이 총시간과 같다", () => {
     for (const network of networks) {
@@ -120,19 +121,35 @@ describe("실데이터 연도별 경로", () => {
     expect(totals[0].legs.filter(leg => leg.kind === "ride").map(leg => leg.kind === "ride" && leg.service)).toEqual(["4"]);
   });
 
-  it("기존 환승은 서울교통공사 환승거리 ÷ 1.2m/s, 장래 GTX-A 서울역은 실측 거리를 쓴다", () => {
-    const now = findTravelRoute(networks[0], station("별내"), station("상봉"))!;
-    const cheonho = now.legs.find(leg => leg.kind === "transfer" && leg.at === "천호");
-    expect(cheonho).toMatchObject({ rule: "csv", seconds: 35 / TRAVEL_PARAMETERS.walkSpeed.value });
-    const gtxa = networks[1].transfers.get("4:서울역")!.find(transfer => transfer.to === "GTXA_LINK:서울역");
-    expect(gtxa).toMatchObject({ rule: "csv", seconds: 264 / TRAVEL_PARAMETERS.walkSpeed.value });
+  it("환승은 서울교통공사 환승거리 ÷ 1.2m/s, 자료가 없는 장래 환승은 150초 가정값이다", () => {
+    const onam = findTravelRoute(networks[0], station("오남"), station("광화문"))!;
+    const ddp = onam.legs.find(leg => leg.kind === "transfer" && leg.at === "동대문역사문화공원");
+    expect(ddp).toMatchObject({ rule: "csv", seconds: 107 / TRAVEL_PARAMETERS.walkSpeed.value });
+    // 4호선 → GTX-A(이미 운행 중인 서울역)는 CSV 실측 264m, 반대 방향은 같은 값을 쓴다.
+    expect(networks[0].transfers.get("4:서울역")!.find(transfer => transfer.to === "GTXA:서울역"))
+      .toMatchObject({ rule: "csv", seconds: 264 / TRAVEL_PARAMETERS.walkSpeed.value });
+    expect(networks[0].transfers.get("GTXA:서울역")!.find(transfer => transfer.to === "4:서울역"))
+      .toMatchObject({ rule: "csv-reverse" });
     const gtxc = networks[2].transfers.get("2:삼성")!.find(transfer => transfer.to === "GTXC:삼성");
     expect(gtxc).toMatchObject({ rule: "future", seconds: TRAVEL_PARAMETERS.futureTransfer.value });
   });
 
-  it("별내→상봉은 2040에 GTX-B로 바뀌며 짧아진다", () => {
+  it("경의중앙선 신촌은 2호선 신촌과 같은 역으로 묶지 않는다", () => {
+    expect(networks[0].platforms.get("GJ:신촌")!.complex).not.toBe("신촌");
+    expect(networks[0].platforms.get("GJ:서울역")!.complex).toBe("서울역");
+  });
+
+  it("GTX-A 삼성 연결은 기존 GTX-A 운행 구간과 갈아타지 않고 이어진다", () => {
+    const route = findTravelRoute(networks[1], station("운정중앙"), station("동탄"))!;
+    const rides = route.legs.filter(leg => leg.kind === "ride");
+    expect(rides).toHaveLength(1);
+    expect(rides[0].kind === "ride" && rides[0].services).toEqual(["GTXA", "GTXA_LINK"]);
+    expect(findTravelRoute(networks[0], station("운정중앙"), station("동탄"))!.totalSeconds).toBeGreaterThan(route.totalSeconds);
+  });
+
+  it("별내→상봉은 2026 경춘선, 2040 GTX-B로 더 짧아진다", () => {
     const [now, , later] = networks.map(network => findTravelRoute(network, station("별내"), station("상봉"))!);
-    expect(now.legs.some(leg => leg.kind === "ride" && leg.service === "GTXB")).toBe(false);
+    expect(now.legs.filter(leg => leg.kind === "ride").map(leg => leg.kind === "ride" && leg.service)).toEqual(["GC"]);
     expect(later.legs.some(leg => leg.kind === "ride" && leg.service === "GTXB")).toBe(true);
     expect(later.totalSeconds).toBeLessThan(now.totalSeconds);
   });

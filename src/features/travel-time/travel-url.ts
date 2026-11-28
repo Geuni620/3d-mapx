@@ -1,4 +1,4 @@
-import { TIME_BANDS, type TimeBand } from "./travel-network";
+import { TIME_BANDS, type TimeBand } from "./travel-bands";
 import type { TravelEndpoint } from "./travel-route";
 import { parseTravelYear, type TravelYear } from "./travel-years";
 

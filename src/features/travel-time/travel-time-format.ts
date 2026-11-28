@@ -27,8 +27,8 @@ export function platformName(network: TravelNetwork, id: string) {
 
 export function futureServicesUsed(route: TravelRoute | null, network: TravelNetwork) {
   return [...new Set((route?.legs ?? [])
-    .filter(leg => leg.kind === "ride" && network.services.get(leg.service)?.future)
-    .map(leg => leg.kind === "ride" ? leg.service : ""))];
+    .flatMap(leg => leg.kind === "ride" ? leg.services : [])
+    .filter(service => network.services.get(service)?.future))];
 }
 
 export function routeFailure(endpoint: TravelEndpoint, network: TravelNetwork, role: "출발" | "도착") {

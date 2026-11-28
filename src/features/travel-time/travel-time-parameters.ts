@@ -132,7 +132,26 @@ export const WALK_SENSITIVITY = [
 export type FutureServiceKind = "gtx" | "metro";
 
 // 노선별로 1차 출처 값이 있으면 유형 기본값보다 먼저 쓴다.
-export const FUTURE_SERVICE_OVERRIDES: Record<string, { speed?: TravelParameter }> = {
+export const FUTURE_SERVICE_OVERRIDES: Record<string, {
+  speed?: TravelParameter;
+  /** 1차 출처의 두 역 사이 소요시간(분). 선형 거리로 나눠 표정속도를 구한다. */
+  timing?: { parameter: TravelParameter; from: string; to: string };
+}> = {
+  GTXB: {
+    timing: {
+      from: "마석",
+      to: "청량리",
+      parameter: {
+        label: "GTX-B 마석–청량리 소요시간",
+        value: 23,
+        unit: "분",
+        status: "출처",
+        sourceLabel: "국토교통부 정책브리핑 2024-02-28",
+        sourceUrl: "https://www.korea.kr/news/policyNewsView.do?newsId=148926423",
+        note: "\"남양주 마석에서 청량리까지는 45분 이상에서 23분으로\"",
+      },
+    },
+  },
   DONGBUK: {
     speed: {
       label: "동북선 표정속도",
@@ -190,4 +209,79 @@ export const BASE_HEADWAY_ASSUMPTION: Omit<TravelParameter, "value"> = {
   unit: "분",
   status: "가정값",
   note: "같은 시간대 1~8호선 구간별 배차의 중앙값을 적용",
+};
+
+/**
+ * 1~8호선 밖 기준망 노선의 차내시간·배차.
+ * - speed: 1차 출처의 표정속도(km/h)
+ * - end-to-end: 1차 출처의 두 역 사이 소요시간(분). 앱이 OSM 선로 거리로 나눠 표정속도를 구한다.
+ * 항목이 없으면 신설 도시·광역철도와 같은 가정값(1~8호선 시간표 표정속도·배차 중앙값)을 쓴다.
+ */
+export type ServiceTiming =
+  | { basis: "speed"; parameter: TravelParameter }
+  | { basis: "end-to-end"; parameter: TravelParameter; from: string; to: string };
+
+export interface ServiceGroupParameters {
+  timing?: ServiceTiming;
+  /** 시간대별 배차. 출처가 시간대마다 다르면 band로 고른다. */
+  headway?: (band: { day: "DAY" | "SAT" | "END"; hour: number }) => TravelParameter;
+}
+
+export interface RegionalServiceParameters extends ServiceGroupParameters {
+  express?: ServiceGroupParameters;
+  /** 운행 계통이 갈라진 노선: 이 역을 지나는 계통에만 적용 */
+  byStation?: Record<string, ServiceGroupParameters>;
+}
+
+const GTXA_BRIEFING = {
+  sourceLabel: "국토교통부 정책브리핑 2025-04-01 「GTX-A 수서∼동탄 개통 1년간 410만 명 이용」",
+  sourceUrl: "https://www.korea.kr/news/policyNewsView.do?newsId=148941217",
+};
+
+const EVERLINE_KRIC = {
+  sourceLabel: "KRIC 표준데이터 운행정보(용인경량전철, 2025-03-31)",
+  sourceUrl: "https://data.kric.go.kr/rips/dataset/download.file?type=filedata&id=16&operation=1",
+};
+
+function peakHour(band: { day: string; hour: number }) {
+  return band.day === "DAY" && ((band.hour >= 7 && band.hour < 9) || (band.hour >= 17 && band.hour < 20));
+}
+
+/**
+ * 공표 시간표(data/regional-timing)가 없는 노선만 적는다. 시간표가 있는 노선은 시간표가 우선한다.
+ */
+export const REGIONAL_SERVICE: Record<string, RegionalServiceParameters> = {
+  GTXA: {
+    byStation: {
+      운정중앙: {
+        timing: {
+          basis: "end-to-end", from: "운정중앙", to: "서울역",
+          parameter: { label: "GTX-A 운정중앙–서울역 소요시간", value: 22, unit: "분", status: "출처", ...GTXA_BRIEFING, note: "\"GTX 개통 뒤 22분으로 단축\"" },
+        },
+        headway: band => peakHour(band)
+          ? { label: "GTX-A 운정중앙–서울역 첨두 배차", value: 6.25, unit: "분", status: "출처", ...GTXA_BRIEFING, note: "\"출퇴근 시간 배차간격이 기존 10분에서 6.25분으로 단축\"(2025-03-01부터)" }
+          : { label: "GTX-A 운정중앙–서울역 비첨두 배차", value: 10, unit: "분", status: "가정값", note: "비첨두 배차 미확인. 단축 전 첨두 배차 10분(같은 출처)을 상한으로 둠" },
+      },
+      동탄: {
+        timing: {
+          basis: "end-to-end", from: "수서", to: "동탄",
+          parameter: { label: "GTX-A 수서–동탄 소요시간", value: 21, unit: "분", status: "출처", ...GTXA_BRIEFING, note: "\"75분이 걸렸으나 21분으로 단축\"" },
+        },
+        headway: () => ({ label: "GTX-A 수서–동탄 배차", value: 17, unit: "분", status: "가정값", ...GTXA_BRIEFING, note: "시간대별 배차 미확인. \"상·하행 각 60회\"를 운영시간 17시간 가정으로 나눈 평균" }),
+      },
+    },
+  },
+  EVER: {
+    timing: {
+      basis: "end-to-end", from: "기흥", to: "전대·에버랜드",
+      parameter: { label: "에버라인 기흥–전대·에버랜드 소요시간", value: 28, unit: "분", status: "출처", ...EVERLINE_KRIC, note: "시각이 실린 열차의 전 구간 소요시간" },
+    },
+    headway: band => {
+      const weekday = band.day === "DAY";
+      const value = weekday
+        ? band.hour < 7 ? 10 : band.hour < 9 ? 3 : band.hour < 17 ? 6 : band.hour < 20 ? 4 : band.hour < 22 ? 6 : 10
+        : band.hour >= 7 && band.hour < 21 ? 6 : 10;
+      return { label: "에버라인 배차", value, unit: "분", status: "출처", ...EVERLINE_KRIC, note: "평일 07~09시 3분·09~17시 6분·17~20시 4분, 휴일 07~21시 6분(원문 운행시격)" };
+    },
+  },
 };

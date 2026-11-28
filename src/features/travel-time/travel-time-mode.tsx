@@ -3,6 +3,7 @@ import { useMap } from "react-map-gl/maplibre";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import type { MapTheme } from "../../app/seoul-daylight";
 import { BASE_GRAPH, FUTURE_LINES } from "./travel-time-data";
+import { REGIONAL_LINES, REGIONAL_TIMINGS } from "./travel-regional";
 import { endpointCoordinate, routeBounds, routeFailure } from "./travel-time-format";
 import { TravelTimeLayers } from "./travel-time-layers";
 import { buildTravelNetwork, TIME_BANDS, type TimeBand, type TravelNetwork } from "./travel-network";
@@ -30,7 +31,7 @@ export default function TravelTimeMode({ theme, onClose }: { theme: MapTheme; on
   // 연도별 그래프 구성 + 3개 연도 탐색은 합쳐 수 ms~수십 ms다. 숫자 애니메이션·지도 이벤트로 다시 그릴 때마다
   // 반복하지 않도록 시간대와 출발·도착이 바뀔 때만 계산한다.
   const networks = useMemo(
-    () => TRAVEL_YEARS.map(value => buildTravelNetwork(BASE_GRAPH, FUTURE_LINES.lines, value, band)),
+    () => TRAVEL_YEARS.map(value => buildTravelNetwork(BASE_GRAPH, FUTURE_LINES.lines, value, band, REGIONAL_LINES, REGIONAL_TIMINGS)),
     [band],
   );
   const results = useMemo<YearResult[]>(() => networks.map(network => {

@@ -46,6 +46,7 @@ export interface FutureStation {
   kind: string;
   coordinate: Coordinate | null;
   coordSource?: string;
+  sourceUrl?: string;
   transferTo: string[];
 }
 
@@ -81,7 +82,7 @@ export interface FutureLine {
       order: string[];
       segments: FutureSegment[];
       excluded: { station: string; reason: string }[];
-      through?: { line: number; junction: string; before: string };
+      through?: { service: string; junctions: string[]; replaces?: string[] };
     };
   sources: { org: string; title: string; date: string; url: string; tier: string }[];
   conflicts: string[];

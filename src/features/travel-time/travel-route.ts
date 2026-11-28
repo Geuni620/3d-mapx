@@ -28,6 +28,8 @@ export type RouteLeg =
   | {
     kind: "ride";
     service: string;
+    /** 직결 운행으로 이어 탄 노선까지 포함한 계통 목록 */
+    services: string[];
     fromPlatform: string;
     toPlatform: string;
     waitSeconds: number;
@@ -292,6 +294,7 @@ function summarizeRoute(
         legs.push({
           kind: "ride",
           service: run.service,
+          services: [run.service],
           fromPlatform: run.from,
           toPlatform: run.to,
           waitSeconds: pendingWait,
@@ -309,6 +312,7 @@ function summarizeRoute(
         const leg = legs.at(-1);
         if (leg?.kind === "ride") {
           leg.toPlatform = run.to;
+          if (!leg.services.includes(run.service)) leg.services.push(run.service);
           leg.seconds += edge.cost;
           leg.stops += 1;
           leg.approxMeters += run.approxMeters;
