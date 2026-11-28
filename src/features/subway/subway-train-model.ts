@@ -1,20 +1,13 @@
-import {
-  BoxGeometry,
-  CylinderGeometry,
-  Group,
-  Mesh,
-  type BufferGeometry,
-} from "three";
+import { Group, Mesh, type BufferGeometry, type Material, type Object3D } from "three";
 import { createSubwayTrainMaterials } from "./subway-train-materials";
-
-const CAR_LENGTH_METERS = 19.5;
-const CAR_WIDTH_METERS = 3.15;
-const CAR_BODY_HEIGHT_METERS = 3.4;
+import { createCabNose, createDoorLamps, createSideSkin } from "./subway-train-shell";
+import { createCarBody, createPantograph, createRunningGear } from "./subway-train-equipment";
 
 export interface CreateSubwayTrainModelOptions {
   lineColor: string;
   bodyColor?: string;
   carCount: number;
+  onTextureLoad?: () => void;
 }
 
 export interface SubwayTrainModel {
@@ -23,194 +16,117 @@ export interface SubwayTrainModel {
   dispose: () => void;
 }
 
-// 여러 차량을 하나의 열차로 묶고, 모든 차량이 같은 도형과 재질을 함께 쓰도록 만든다.
+const MAIN_FORMATION = ["Tc", "M", "M'", "T", "M'", "T1", "T", "M", "M'", "Tc"];
+export const LINE_2_MAIN_CAR_COUNT = MAIN_FORMATION.length;
+
+const controlsByCar = new WeakMap<Object3D, { leaves: Mesh; lamps: Mesh }>();
+
+export function applyTrainDoors(
+  car: Object3D,
+  open: number,
+  light: number | boolean,
+  side: "left" | "right",
+  closing = false,
+) {
+  let controls = controlsByCar.get(car);
+  if (!controls) {
+    const leaves = car.getObjectByName("train-door-window-skin");
+    const lamps = car.getObjectByName("train-door-lamps");
+    if (!(leaves instanceof Mesh) || !(lamps instanceof Mesh)) return;
+    controls = { leaves, lamps };
+    controlsByCar.set(car, controls);
+  }
+  const leafWeights = controls.leaves.morphTargetInfluences!;
+  const lampWeights = controls.lamps.morphTargetInfluences!;
+  // 후미 운전실은 차체만 반대로 조립하므로 같은 승강장을 향하려면 로컬 좌우를 바꾼다.
+  const index = (side === "right") !== Boolean(car.userData.reversedCab) ? 0 : 1;
+  leafWeights[index] = Math.max(0, Math.min(1, open));
+  leafWeights[1 - index] = 0;
+  const colorChannel = index + (closing ? 2 : 0);
+  const intensity = Math.max(0, Math.min(1, Number(light)));
+  lampWeights.fill(0);
+  lampWeights[colorChannel] = intensity;
+  controls.lamps.visible = intensity > 0;
+}
+
+function carType(count: number, index: number) {
+  if (count === MAIN_FORMATION.length) return MAIN_FORMATION[index];
+  if (index === 0 || index === count - 1) return "Tc";
+  if (count === 6) return ["M", "M'", "T", "M'"][index - 1];
+  return count === 4 ? "M'" : "M";
+}
+
 export function createSubwayTrainModel({
   lineColor,
   bodyColor,
   carCount,
+  onTextureLoad,
 }: CreateSubwayTrainModelOptions): SubwayTrainModel {
-  const materials = createSubwayTrainMaterials(lineColor, bodyColor);
-  const geometries = createSharedTrainGeometries();
+  const materials = createSubwayTrainMaterials(lineColor, bodyColor, onTextureLoad);
+  const geometries = new Map<string, BufferGeometry>();
+  function part(name: string, key: string, build: () => BufferGeometry, material: Material) {
+    const geometry = geometries.get(key) ?? build();
+    geometries.set(key, geometry);
+    const mesh = new Mesh(geometry, material);
+    mesh.name = name;
+    return mesh;
+  }
+
   const root = new Group();
-  const cars = Array.from({ length: carCount }, (_, carIndex) =>
-    createTrainCar({
-      carIndex,
-      carCount,
-      geometries,
-      materials,
-    }),
-  );
-
   root.name = "subway-train";
+  const cars = Array.from({ length: carCount }, (_, index) => {
+    const type = carType(carCount, index);
+    const cab = type === "Tc",
+      tail = cab && index > 0;
+    const car = new Group(),
+      shell = new Group();
+    car.name = `train-car-${index + 1}`;
+    car.userData.carType = type;
+    car.userData.reversedCab = tail;
+    if (tail) shell.rotation.z = Math.PI;
+    const powered = type.startsWith("M");
+    shell.add(
+      part(
+        "train-car-body",
+        `body-${cab}-${powered}`,
+        () => createCarBody(cab, powered),
+        materials.body,
+      ),
+    );
+    shell.add(
+      part("train-door-window-skin", `side-${cab}`, () => createSideSkin(cab), materials.skin),
+    );
+    const lamps = part(
+      "train-door-lamps",
+      `lamps-${cab}`,
+      () => createDoorLamps(cab),
+      materials.doorLight,
+    );
+    lamps.visible = false;
+    shell.add(lamps);
+    if (cab) {
+      shell.add(
+        part(
+          tail ? "train-tail-lights" : "train-headlights",
+          tail ? "tail" : "head",
+          () => createCabNose(tail),
+          materials.skin,
+        ),
+      );
+    }
+    if (type === "M'")
+      shell.add(part("train-pantograph", "pantograph", createPantograph, materials.body));
+    car.add(shell, part("train-bogie", "bogies", createRunningGear, materials.body));
+    return car;
+  });
   root.add(...cars);
-
   return {
     root,
     cars,
     dispose() {
-      // 여러 차량이 함께 사용하던 도형과 재질을 GPU 메모리에서 해제한다.
-      Object.values(geometries).forEach((geometry) => geometry.dispose());
+      geometries.forEach((geometry) => geometry.dispose());
       materials.dispose();
       root.clear();
     },
   };
-}
-
-type TrainGeometries = ReturnType<typeof createSharedTrainGeometries>;
-type TrainMaterials = ReturnType<typeof createSubwayTrainMaterials>;
-
-// 각 차량에서 반복해서 사용하는 차체, 창문, 문 등의 기본 도형을 한 번만 만든다.
-function createSharedTrainGeometries() {
-  return {
-    body: new BoxGeometry(
-      CAR_WIDTH_METERS,
-      CAR_LENGTH_METERS,
-      CAR_BODY_HEIGHT_METERS,
-      1,
-      1,
-      1,
-    ),
-    roof: new BoxGeometry(CAR_WIDTH_METERS * 0.88, 5.6, 0.28),
-    roofLine: new BoxGeometry(0.68, CAR_LENGTH_METERS * 0.88, 0.1),
-    window: new BoxGeometry(0.08, 1.85, 1.05),
-    door: new BoxGeometry(0.09, 1.7, 2.28),
-    line: new BoxGeometry(0.1, CAR_LENGTH_METERS * 0.93, 0.24),
-    bogie: new BoxGeometry(CAR_WIDTH_METERS * 0.72, 2.2, 0.48),
-    coupler: new BoxGeometry(0.7, 0.65, 0.45),
-    cabWindow: new BoxGeometry(CAR_WIDTH_METERS * 0.62, 0.09, 1.08),
-    light: new CylinderGeometry(0.16, 0.16, 0.12, 10),
-  } satisfies Record<string, BufferGeometry>;
-}
-
-// 열차 한 칸을 만들고, 첫 칸과 마지막 칸에만 앞뒤 운전석과 조명을 붙인다.
-function createTrainCar({
-  carIndex,
-  carCount,
-  geometries,
-  materials,
-}: {
-  carIndex: number;
-  carCount: number;
-  geometries: TrainGeometries;
-  materials: TrainMaterials;
-}) {
-  const car = new Group();
-  const body = new Mesh(geometries.body, materials.body);
-
-  car.name = `train-car-${carIndex + 1}`;
-  body.name = "train-car-body";
-  body.position.z = 2.25;
-  car.add(body);
-
-  addSideDetails(car, geometries, materials);
-  addRoofAndUndercarriage(car, geometries, materials);
-
-  if (carIndex === 0) {
-    addCabFace(car, "front", geometries, materials);
-  }
-
-  if (carIndex === carCount - 1) {
-    addCabFace(car, "rear", geometries, materials);
-  }
-
-  if (carIndex > 0) {
-    const coupler = new Mesh(geometries.coupler, materials.undercarriage);
-
-    coupler.position.set(0, CAR_LENGTH_METERS / 2 + 0.3, 1.05);
-    car.add(coupler);
-  }
-
-  return car;
-}
-
-// 차량 양쪽 옆면에 노선 색상 띠, 창문과 출입문을 붙인다.
-function addSideDetails(
-  car: Group,
-  geometries: TrainGeometries,
-  materials: TrainMaterials,
-) {
-  const windowPositions = [-7.15, -4.85, -1.15, 1.15, 4.85, 7.15];
-  const doorPositions = [-3, 3];
-
-  for (const side of [-1, 1]) {
-    const x = side * (CAR_WIDTH_METERS / 2 + 0.055);
-    const line = new Mesh(geometries.line, materials.line);
-
-    line.name = "train-line-accent";
-    line.position.set(x, 0, 1.48);
-    car.add(line);
-
-    windowPositions.forEach((y) => {
-      const window = new Mesh(geometries.window, materials.window);
-
-      window.name = "train-window";
-      window.position.set(x + side * 0.01, y, 2.68);
-      car.add(window);
-    });
-
-    doorPositions.forEach((y) => {
-      const door = new Mesh(geometries.door, materials.roof);
-
-      door.name = "train-door";
-      door.position.set(x + side * 0.015, y, 2.05);
-      car.add(door);
-    });
-  }
-}
-
-// 차량 위에는 지붕 장치를, 아래에는 주행 장치 모형을 붙인다.
-function addRoofAndUndercarriage(
-  car: Group,
-  geometries: TrainGeometries,
-  materials: TrainMaterials,
-) {
-  const roofLine = new Mesh(geometries.roofLine, materials.line);
-
-  roofLine.name = "train-line-accent";
-  roofLine.position.set(0, 0, 4.27);
-  car.add(roofLine);
-
-  for (const y of [-4.5, 4.5]) {
-    const roofUnit = new Mesh(geometries.roof, materials.roof);
-
-    roofUnit.name = "train-roof-equipment";
-    roofUnit.position.set(0, y, 4.08);
-    car.add(roofUnit);
-
-    const bogie = new Mesh(geometries.bogie, materials.undercarriage);
-
-    bogie.name = "train-bogie";
-    bogie.position.set(0, y, 0.45);
-    car.add(bogie);
-  }
-}
-
-// 열차의 앞뒤 면에 운전석 창문과 전조등 또는 후미등을 붙인다.
-function addCabFace(
-  car: Group,
-  face: "front" | "rear",
-  geometries: TrainGeometries,
-  materials: TrainMaterials,
-) {
-  const direction = face === "front" ? 1 : -1;
-  const cabWindow = new Mesh(geometries.cabWindow, materials.window);
-  const lightGroup = new Group();
-
-  cabWindow.position.set(0, direction * (CAR_LENGTH_METERS / 2 + 0.05), 2.72);
-  car.add(cabWindow);
-
-  lightGroup.name = face === "front" ? "train-headlights" : "train-tail-lights";
-
-  for (const x of [-0.88, 0.88]) {
-    const light = new Mesh(
-      geometries.light,
-      face === "front" ? materials.headlight : materials.tailLight,
-    );
-
-    light.rotation.x = Math.PI / 2;
-    light.position.set(x, direction * (CAR_LENGTH_METERS / 2 + 0.12), 1.65);
-    lightGroup.add(light);
-  }
-
-  car.add(lightGroup);
 }

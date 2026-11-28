@@ -1,0 +1,12 @@
+당산철교 퇴근길 방송 시안
+
+고객님, 오늘 하루는 다들 어떤 하루셨나요?
+지금 당산철교를 건너고 있습니다.
+잠시 휴대폰을 내려두시고, 창밖을 한번 바라봐 주세요.
+한강에 노을이 참 곱게 들었네요.
+다리 건너는 동안은 마음 편히 쉬어 가시면 좋겠습니다.
+
+첫 인사말은 근휘님이 고른 문구다. 참고 영상은 KBS 〈수고했어, 오늘도〉(2023.07.29.) https://www.youtube.com/watch?v=mv4gYCdrV70 이다. 한강을 건너며 차창 밖을 권하는 상황은 2호선 차장 인터뷰 https://www.khan.co.kr/article/202303091607011 및 문화포털 3호선 인터뷰 https://www.youtube.com/watch?v=GOKu7sfxi2I 를 참고했다. 당산철교에 이어지는 문장은 이 시안을 위해 썼다.
+
+A와 영상에는 Supertone Supertonic 3의 일반 남성 프리셋 M4를, B에는 M1을 썼다. 두 목소리 모두 텍스트에서 합성했다. 공개 인터뷰는 말의 흐름만 참고했다. 실존 인물의 음성 입력, 영상의 음원 및 참조 음성은 사용하지 않았다. 모델과 프리셋은 BigScience Open RAIL-M, 공식 구현은 MIT. https://huggingface.co/supertone-oss-archive/supertonic-3/blob/aafc6e32416a594460b32413efc49d7fe4ce6d46/LICENSE
+주행음과 차내 스피커의 반사는 직접 합성했다. 화면은 final-stable.mp4 영상 스트림을 복사했다. 지도 OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors (ODbL, https://www.openstreetmap.org/copyright), 지형 Mapzen Terrain Tiles, 시간표 서울교통공사, 글꼴 Noto Sans KR(SIL OFL 1.1). 자세한 지도·지형·시각 자료 출처는 상위 폴더 credits.txt에 있다.

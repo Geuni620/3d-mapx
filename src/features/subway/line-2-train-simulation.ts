@@ -1,14 +1,12 @@
 import type { SubwayCoordinate } from "./osm-subway-network";
-import type { SubwayRouteSampler } from "./subway-route-sampler";
+import {
+  sampleSubwayRouteChordPose,
+  type SubwayRouteSampler,
+} from "./subway-route-sampler";
+import { SUBWAY_TRAIN_BOGIE_OFFSET_METERS } from "./subway-train-dimensions";
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
-const KOREAN_TIME_FORMATTER = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Seoul",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hourCycle: "h23",
-});
+const KOREAN_UTC_OFFSET_SECONDS = 9 * 60 * 60;
 
 export interface SubwaySpeedProfileEntry {
   startMinute: number;
@@ -22,19 +20,26 @@ export interface SubwayTrainCarPose {
   headingRadians: number;
 }
 
-export interface SubwayTrainSimulationState {
+export interface SubwayTrainMotion {
   id: string;
   phase: "moving" | "dwelling";
+  motion: "accelerating" | "cruising" | "braking" | "dwelling";
   frontDistanceMeters: number;
   speedMetersPerSecond: number;
+  accelerationMetersPerSecondSquared: number;
+}
+
+export interface SubwayTrainSimulationState extends SubwayTrainMotion {
   carPoses: SubwayTrainCarPose[];
 }
 
 export interface SubwayTrainSimulation {
   getState: (timestampMs: number) => SubwayTrainSimulationState;
+  getMotion: (timestampMs: number) => SubwayTrainMotion;
+  getLeadPose: (timestampMs: number) => SubwayTrainMotion & { lead: SubwayTrainCarPose };
 }
 
-interface SubwayTrainSimulationOptions {
+export interface SubwayTrainSimulationOptions {
   id: string;
   sampler: SubwayRouteSampler;
   stopDistancesMeters: number[];
@@ -43,6 +48,9 @@ interface SubwayTrainSimulationOptions {
   dwellSeconds: number;
   phaseOffsetSeconds: number;
   speedProfile: SubwaySpeedProfileEntry[];
+  maxAccelerationMetersPerSecondSquared?: number;
+  maxDecelerationMetersPerSecondSquared?: number;
+  maxJerkMetersPerSecondCubed?: number;
 }
 
 interface SimulationTimelineSegment {
@@ -51,51 +59,63 @@ interface SimulationTimelineSegment {
   startDistanceMeters: number;
   endDistanceMeters: number;
   phase: "moving" | "dwelling";
-  speedMetersPerSecond: number;
+  motion: SubwayTrainMotion["motion"];
+  startSpeedMetersPerSecond: number;
+  startAccelerationMetersPerSecondSquared: number;
+  jerkMetersPerSecondCubed: number;
 }
+
+interface MotionPhaseDefinition {
+  durationSeconds: number;
+  motion: "accelerating" | "cruising" | "braking";
+  jerkMetersPerSecondCubed: number;
+}
+
+interface KinematicState {
+  distanceMeters: number;
+  speedMetersPerSecond: number;
+  accelerationMetersPerSecondSquared: number;
+}
+
+const DEFAULT_MAX_ACCELERATION_METERS_PER_SECOND_SQUARED = 0.9;
+const DEFAULT_MAX_DECELERATION_METERS_PER_SECOND_SQUARED = 1;
+const DEFAULT_MAX_JERK_METERS_PER_SECOND_CUBED = 0.65;
 
 // 운행 조건을 바탕으로 하루 시간표를 만들고, 특정 시각의 열차 위치와 상태를 계산할 수 있게 한다.
 export function createSubwayTrainSimulation(
   options: SubwayTrainSimulationOptions,
 ): SubwayTrainSimulation {
+  validateMotionLimits(options);
   const timeline = createDailyTimeline(options);
 
+  function getMotion(timestampMs: number): SubwayTrainMotion {
+    const second = wrap(getKoreanSecondOfDay(timestampMs) + options.phaseOffsetSeconds, SECONDS_PER_DAY);
+    const segment = findTimelineSegment(timeline, second);
+    const state = sampleTimelineSegment(segment, second - segment.startSecond);
+    return {
+      id: options.id,
+      phase: segment.phase,
+      motion: segment.motion,
+      frontDistanceMeters: wrap(state.distanceMeters, options.sampler.totalDistanceMeters),
+      speedMetersPerSecond: Math.max(0, state.speedMetersPerSecond),
+      accelerationMetersPerSecondSquared: state.accelerationMetersPerSecondSquared,
+    };
+  }
+  function carPose(front: number, carIndex: number): SubwayTrainCarPose {
+    const distanceMeters = wrap(front - carIndex * options.carSpacingMeters, options.sampler.totalDistanceMeters);
+    return { carIndex, distanceMeters, ...sampleSubwayRouteChordPose(options.sampler, distanceMeters, SUBWAY_TRAIN_BOGIE_OFFSET_METERS) };
+  }
   return {
+    getMotion,
+    getLeadPose(timestampMs) {
+      const motion = getMotion(timestampMs);
+      return { ...motion, lead: carPose(motion.frontDistanceMeters, 0) };
+    },
     getState(timestampMs) {
-      const simulationSecond = wrap(
-        getKoreanSecondOfDay(timestampMs) + options.phaseOffsetSeconds,
-        SECONDS_PER_DAY,
-      );
-      const segment = findTimelineSegment(timeline, simulationSecond);
-      const elapsedSeconds = simulationSecond - segment.startSecond;
-      const frontDistanceMeters =
-        segment.phase === "dwelling"
-          ? segment.startDistanceMeters
-          : segment.startDistanceMeters +
-            elapsedSeconds * segment.speedMetersPerSecond;
-
+      const motion = getMotion(timestampMs);
       return {
-        id: options.id,
-        phase: segment.phase,
-        frontDistanceMeters: wrap(
-          frontDistanceMeters,
-          options.sampler.totalDistanceMeters,
-        ),
-        speedMetersPerSecond: segment.speedMetersPerSecond,
-        carPoses: Array.from({ length: options.carCount }, (_, carIndex) => {
-          const distanceMeters = wrap(
-            frontDistanceMeters - carIndex * options.carSpacingMeters,
-            options.sampler.totalDistanceMeters,
-          );
-          const pose = options.sampler.sample(distanceMeters);
-
-          return {
-            carIndex,
-            distanceMeters,
-            coordinate: pose.coordinate,
-            headingRadians: pose.headingRadians,
-          };
-        }),
+        ...motion,
+        carPoses: Array.from({ length: options.carCount }, (_, i) => carPose(motion.frontDistanceMeters, i)),
       };
     },
   };
@@ -128,8 +148,7 @@ function createDailyTimeline(
   );
 
   while (currentSecond < SECONDS_PER_DAY) {
-    const speed = getSpeedAtSecond(speedProfile, currentSecond);
-    const nextSpeedBoundary = getNextSpeedBoundary(
+    const targetSpeedMetersPerSecond = getSpeedAtSecond(
       speedProfile,
       currentSecond,
     );
@@ -141,36 +160,39 @@ function createDailyTimeline(
     );
     const remainingDistanceMeters =
       targetDistanceMeters - currentDistanceMeters;
-    const arrivalSecond = currentSecond + remainingDistanceMeters / speed;
-    const endSecond = Math.min(
-      arrivalSecond,
-      nextSpeedBoundary,
-      SECONDS_PER_DAY,
+    const motionPhases = createJerkLimitedMotionPhases(
+      remainingDistanceMeters,
+      targetSpeedMetersPerSecond,
+      options.maxAccelerationMetersPerSecondSquared ??
+        DEFAULT_MAX_ACCELERATION_METERS_PER_SECOND_SQUARED,
+      options.maxDecelerationMetersPerSecondSquared ??
+        DEFAULT_MAX_DECELERATION_METERS_PER_SECOND_SQUARED,
+      options.maxJerkMetersPerSecondCubed ??
+        DEFAULT_MAX_JERK_METERS_PER_SECOND_CUBED,
     );
-    const endDistanceMeters =
-      currentDistanceMeters + (endSecond - currentSecond) * speed;
 
-    timeline.push({
-      startSecond: currentSecond,
-      endSecond,
-      startDistanceMeters: currentDistanceMeters,
-      endDistanceMeters,
-      phase: "moving",
-      speedMetersPerSecond: speed,
-    });
-    currentSecond = endSecond;
-    currentDistanceMeters = endDistanceMeters;
+    const movement = appendMotionPhases(
+      timeline,
+      motionPhases,
+      currentSecond,
+      currentDistanceMeters,
+    );
 
-    if (arrivalSecond <= endSecond + Number.EPSILON) {
-      currentDistanceMeters = targetDistanceMeters;
-      nextStopIndex = (nextStopIndex + 1) % stops.length;
-      currentSecond = addDwellingSegment(
-        timeline,
-        currentSecond,
-        currentDistanceMeters,
-        options.dwellSeconds,
-      );
+    currentSecond = movement.endSecond;
+    currentDistanceMeters = movement.state.distanceMeters;
+
+    if (!movement.completed || currentSecond >= SECONDS_PER_DAY) {
+      break;
     }
+
+    currentDistanceMeters = targetDistanceMeters;
+    nextStopIndex = (nextStopIndex + 1) % stops.length;
+    currentSecond = addDwellingSegment(
+      timeline,
+      currentSecond,
+      currentDistanceMeters,
+      options.dwellSeconds,
+    );
   }
 
   return timeline;
@@ -192,11 +214,300 @@ function addDwellingSegment(
       startDistanceMeters: distanceMeters,
       endDistanceMeters: distanceMeters,
       phase: "dwelling",
-      speedMetersPerSecond: 0,
+      motion: "dwelling",
+      startSpeedMetersPerSecond: 0,
+      startAccelerationMetersPerSecondSquared: 0,
+      jerkMetersPerSecondCubed: 0,
     });
   }
 
   return endSecond;
+}
+
+function createJerkLimitedMotionPhases(
+  distanceMeters: number,
+  targetSpeedMetersPerSecond: number,
+  maxAccelerationMetersPerSecondSquared: number,
+  maxDecelerationMetersPerSecondSquared: number,
+  maxJerkMetersPerSecondCubed: number,
+): MotionPhaseDefinition[] {
+  const peakSpeedMetersPerSecond = solvePeakSpeed(
+    distanceMeters,
+    targetSpeedMetersPerSecond,
+    maxAccelerationMetersPerSecondSquared,
+    maxDecelerationMetersPerSecondSquared,
+    maxJerkMetersPerSecondCubed,
+  );
+  const accelerationRamp = createRampDurations(
+    peakSpeedMetersPerSecond,
+    maxAccelerationMetersPerSecondSquared,
+    maxJerkMetersPerSecondCubed,
+  );
+  const brakingRamp = createRampDurations(
+    peakSpeedMetersPerSecond,
+    maxDecelerationMetersPerSecondSquared,
+    maxJerkMetersPerSecondCubed,
+  );
+  const rampDistanceMeters =
+    (peakSpeedMetersPerSecond *
+      (accelerationRamp.totalDurationSeconds +
+        brakingRamp.totalDurationSeconds)) /
+    2;
+  const cruiseDurationSeconds =
+    peakSpeedMetersPerSecond > 0
+      ? Math.max(0, distanceMeters - rampDistanceMeters) /
+        peakSpeedMetersPerSecond
+      : 0;
+
+  return [
+    createMotionPhase(
+      accelerationRamp.jerkDurationSeconds,
+      "accelerating",
+      maxJerkMetersPerSecondCubed,
+    ),
+    createMotionPhase(
+      accelerationRamp.constantAccelerationDurationSeconds,
+      "accelerating",
+      0,
+    ),
+    createMotionPhase(
+      accelerationRamp.jerkDurationSeconds,
+      "accelerating",
+      -maxJerkMetersPerSecondCubed,
+    ),
+    createMotionPhase(cruiseDurationSeconds, "cruising", 0),
+    createMotionPhase(
+      brakingRamp.jerkDurationSeconds,
+      "braking",
+      -maxJerkMetersPerSecondCubed,
+    ),
+    createMotionPhase(
+      brakingRamp.constantAccelerationDurationSeconds,
+      "braking",
+      0,
+    ),
+    createMotionPhase(
+      brakingRamp.jerkDurationSeconds,
+      "braking",
+      maxJerkMetersPerSecondCubed,
+    ),
+  ].filter((phase) => phase.durationSeconds > Number.EPSILON);
+}
+
+// 두 공표 시각 사이에서 출발·도착 속도가 모두 0인 곡선을 맞춘다.
+// 선형 거리와 시간이 제원상 빠듯한 구간은 시간표를 우선하므로 중간 속도는 추정치다.
+export function createScheduledLeg(distance: number, duration: number) {
+  if (!(distance > 0 && duration > 0)) throw new Error("역간 거리와 시간은 양수여야 합니다.");
+  const acceleration = 3.0 / 3.6, braking = 3.5 / 3.6, jerk = DEFAULT_MAX_JERK_METERS_PER_SECOND_CUBED;
+  const maxPeak = solvePeakSpeed(distance, 80 / 3.6, acceleration, braking, jerk);
+  const tripSeconds = (speed: number) => distance / speed + (
+    createRampDurations(speed, acceleration, jerk).totalDurationSeconds +
+    createRampDurations(speed, braking, jerk).totalDurationSeconds
+  ) / 2;
+  let low = 0, high = maxPeak;
+  if (tripSeconds(maxPeak) < duration) {
+    for (let i = 0; i < 32; i++) {
+      const mid = (low + high) / 2;
+      if (tripSeconds(mid) > duration) low = mid;
+      else high = mid;
+    }
+  }
+  const phases = createJerkLimitedMotionPhases(distance, high, acceleration, braking, jerk);
+  const timeline: SimulationTimelineSegment[] = [];
+  const { endSecond } = appendMotionPhases(timeline, phases, 0, 0);
+  const rate = endSecond / duration;
+  return (elapsed: number) => {
+    if (elapsed <= 0 || elapsed >= duration) {
+      return { distanceMeters: elapsed <= 0 ? 0 : distance, speedMetersPerSecond: 0,
+        accelerationMetersPerSecondSquared: 0, motion: "dwelling" as const };
+    }
+    const time = elapsed * rate;
+    const segment = findTimelineSegment(timeline, time);
+    const k = sampleTimelineSegment(segment, time - segment.startSecond);
+    return { distanceMeters: k.distanceMeters, speedMetersPerSecond: Math.max(0, k.speedMetersPerSecond * rate),
+      accelerationMetersPerSecondSquared: k.accelerationMetersPerSecondSquared * rate * rate,
+      motion: segment.motion };
+  };
+}
+
+function solvePeakSpeed(
+  distanceMeters: number,
+  targetSpeedMetersPerSecond: number,
+  maxAccelerationMetersPerSecondSquared: number,
+  maxDecelerationMetersPerSecondSquared: number,
+  maxJerkMetersPerSecondCubed: number,
+) {
+  const getRampDistance = (speedMetersPerSecond: number) => {
+    const accelerationRamp = createRampDurations(
+      speedMetersPerSecond,
+      maxAccelerationMetersPerSecondSquared,
+      maxJerkMetersPerSecondCubed,
+    );
+    const brakingRamp = createRampDurations(
+      speedMetersPerSecond,
+      maxDecelerationMetersPerSecondSquared,
+      maxJerkMetersPerSecondCubed,
+    );
+
+    return (
+      (speedMetersPerSecond *
+        (accelerationRamp.totalDurationSeconds +
+          brakingRamp.totalDurationSeconds)) /
+      2
+    );
+  };
+
+  if (getRampDistance(targetSpeedMetersPerSecond) <= distanceMeters) {
+    return targetSpeedMetersPerSecond;
+  }
+
+  let minimumSpeed = 0;
+  let maximumSpeed = targetSpeedMetersPerSecond;
+
+  for (let iteration = 0; iteration < 48; iteration += 1) {
+    const candidateSpeed = (minimumSpeed + maximumSpeed) / 2;
+
+    if (getRampDistance(candidateSpeed) <= distanceMeters) {
+      minimumSpeed = candidateSpeed;
+    } else {
+      maximumSpeed = candidateSpeed;
+    }
+  }
+
+  return minimumSpeed;
+}
+
+function createRampDurations(
+  targetSpeedMetersPerSecond: number,
+  maxAccelerationMetersPerSecondSquared: number,
+  maxJerkMetersPerSecondCubed: number,
+) {
+  const speedAtMaximumAcceleration =
+    (maxAccelerationMetersPerSecondSquared ** 2) /
+    maxJerkMetersPerSecondCubed;
+  const jerkDurationSeconds =
+    targetSpeedMetersPerSecond <= speedAtMaximumAcceleration
+      ? Math.sqrt(
+          targetSpeedMetersPerSecond / maxJerkMetersPerSecondCubed,
+        )
+      : maxAccelerationMetersPerSecondSquared /
+        maxJerkMetersPerSecondCubed;
+  const constantAccelerationDurationSeconds =
+    targetSpeedMetersPerSecond <= speedAtMaximumAcceleration
+      ? 0
+      : targetSpeedMetersPerSecond /
+          maxAccelerationMetersPerSecondSquared -
+        jerkDurationSeconds;
+
+  return {
+    jerkDurationSeconds,
+    constantAccelerationDurationSeconds,
+    totalDurationSeconds:
+      jerkDurationSeconds * 2 + constantAccelerationDurationSeconds,
+  };
+}
+
+function createMotionPhase(
+  durationSeconds: number,
+  motion: MotionPhaseDefinition["motion"],
+  jerkMetersPerSecondCubed: number,
+): MotionPhaseDefinition {
+  return { durationSeconds, motion, jerkMetersPerSecondCubed };
+}
+
+function appendMotionPhases(
+  timeline: SimulationTimelineSegment[],
+  phases: MotionPhaseDefinition[],
+  startSecond: number,
+  startDistanceMeters: number,
+) {
+  let currentSecond = startSecond;
+  let state: KinematicState = {
+    distanceMeters: startDistanceMeters,
+    speedMetersPerSecond: 0,
+    accelerationMetersPerSecondSquared: 0,
+  };
+
+  for (const phase of phases) {
+    const availableDurationSeconds = SECONDS_PER_DAY - currentSecond;
+    const durationSeconds = Math.min(
+      phase.durationSeconds,
+      availableDurationSeconds,
+    );
+    const endState = integrateKinematics(
+      state,
+      phase.jerkMetersPerSecondCubed,
+      durationSeconds,
+    );
+
+    timeline.push({
+      startSecond: currentSecond,
+      endSecond: currentSecond + durationSeconds,
+      startDistanceMeters: state.distanceMeters,
+      endDistanceMeters: endState.distanceMeters,
+      phase: "moving",
+      motion: phase.motion,
+      startSpeedMetersPerSecond: state.speedMetersPerSecond,
+      startAccelerationMetersPerSecondSquared:
+        state.accelerationMetersPerSecondSquared,
+      jerkMetersPerSecondCubed: phase.jerkMetersPerSecondCubed,
+    });
+    currentSecond += durationSeconds;
+    state = endState;
+
+    if (durationSeconds < phase.durationSeconds) {
+      return { endSecond: currentSecond, state, completed: false };
+    }
+  }
+
+  return { endSecond: currentSecond, state, completed: true };
+}
+
+function sampleTimelineSegment(
+  segment: SimulationTimelineSegment,
+  elapsedSeconds: number,
+): KinematicState {
+  if (segment.phase === "dwelling") {
+    return {
+      distanceMeters: segment.startDistanceMeters,
+      speedMetersPerSecond: 0,
+      accelerationMetersPerSecondSquared: 0,
+    };
+  }
+
+  return integrateKinematics(
+    {
+      distanceMeters: segment.startDistanceMeters,
+      speedMetersPerSecond: segment.startSpeedMetersPerSecond,
+      accelerationMetersPerSecondSquared:
+        segment.startAccelerationMetersPerSecondSquared,
+    },
+    segment.jerkMetersPerSecondCubed,
+    elapsedSeconds,
+  );
+}
+
+function integrateKinematics(
+  state: KinematicState,
+  jerkMetersPerSecondCubed: number,
+  elapsedSeconds: number,
+): KinematicState {
+  const elapsedSquared = elapsedSeconds ** 2;
+
+  return {
+    distanceMeters:
+      state.distanceMeters +
+      state.speedMetersPerSecond * elapsedSeconds +
+      (state.accelerationMetersPerSecondSquared * elapsedSquared) / 2 +
+      (jerkMetersPerSecondCubed * elapsedSeconds ** 3) / 6,
+    speedMetersPerSecond:
+      state.speedMetersPerSecond +
+      state.accelerationMetersPerSecondSquared * elapsedSeconds +
+      (jerkMetersPerSecondCubed * elapsedSquared) / 2,
+    accelerationMetersPerSecondSquared:
+      state.accelerationMetersPerSecondSquared +
+      jerkMetersPerSecondCubed * elapsedSeconds,
+  };
 }
 
 // 역 위치를 한 바퀴 경로 안으로 맞추고, 중복을 제거한 뒤 이동 순서대로 정렬한다.
@@ -246,18 +557,6 @@ function getSpeedAtSecond(
   );
 }
 
-// 현재 시각 이후에 운행 속도가 바뀌는 다음 시각을 찾는다.
-function getNextSpeedBoundary(
-  speedProfile: SubwaySpeedProfileEntry[],
-  currentSecond: number,
-) {
-  return (
-    speedProfile.find((entry) => entry.startMinute * 60 > currentSecond)
-      ?.startMinute ??
-    24 * 60
-  ) * 60;
-}
-
 // 순환 경로에서 현재 위치보다 앞에 있는 다음 역까지의 누적 거리를 계산한다.
 function getNextStopDistance(
   stops: number[],
@@ -285,29 +584,46 @@ function findTimelineSegment(
   timeline: SimulationTimelineSegment[],
   currentSecond: number,
 ) {
-  return (
-    timeline.find(
-      (segment) =>
-        currentSecond >= segment.startSecond &&
-        currentSecond < segment.endSecond,
-    ) ?? timeline.at(-1)!
-  );
+  let lowerIndex = 0;
+  let upperIndex = timeline.length - 1;
+
+  while (lowerIndex <= upperIndex) {
+    const middleIndex = Math.floor((lowerIndex + upperIndex) / 2);
+    const segment = timeline[middleIndex];
+
+    if (currentSecond < segment.startSecond) {
+      upperIndex = middleIndex - 1;
+    } else if (currentSecond >= segment.endSecond) {
+      lowerIndex = middleIndex + 1;
+    } else {
+      return segment;
+    }
+  }
+
+  return timeline.at(-1)!;
 }
 
 // 입력된 시각을 한국 기준으로 바꾸고, 자정부터 몇 초가 지났는지 반환한다.
 function getKoreanSecondOfDay(timestampMs: number) {
-  const parts = Object.fromEntries(
-    KOREAN_TIME_FORMATTER.formatToParts(timestampMs).map((part) => [
-      part.type,
-      part.value,
-    ]),
-  );
+  return wrap(
+    timestampMs + KOREAN_UTC_OFFSET_SECONDS * 1_000,
+    SECONDS_PER_DAY * 1_000,
+  ) / 1_000;
+}
 
-  return (
-    Number(parts.hour) * 60 * 60 +
-    Number(parts.minute) * 60 +
-    Number(parts.second)
-  );
+function validateMotionLimits(options: SubwayTrainSimulationOptions) {
+  const limits = [
+    options.maxAccelerationMetersPerSecondSquared ??
+      DEFAULT_MAX_ACCELERATION_METERS_PER_SECOND_SQUARED,
+    options.maxDecelerationMetersPerSecondSquared ??
+      DEFAULT_MAX_DECELERATION_METERS_PER_SECOND_SQUARED,
+    options.maxJerkMetersPerSecondCubed ??
+      DEFAULT_MAX_JERK_METERS_PER_SECOND_CUBED,
+  ];
+
+  if (limits.some((value) => !Number.isFinite(value) || value <= 0)) {
+    throw new Error("Train motion limits must be positive finite numbers");
+  }
 }
 
 // 거리나 시간이 범위를 넘어도 순환 경로나 하루 안의 값으로 되돌린다.

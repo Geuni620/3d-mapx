@@ -1,17 +1,18 @@
-import { useEffect, useMemo, useRef } from "react";
+import { attachNightPulseStyle } from "../features/night-pulse/night-pulse-style";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LayersList } from "@deck.gl/core";
 import { MapboxOverlay } from "@deck.gl/mapbox";
-import Map, {
-  useControl,
-  useMap,
-  type MapRef,
-} from "react-map-gl/maplibre";
+import Map, { useControl, useMap } from "react-map-gl/maplibre";
 import { INITIAL_VIEW_STATE } from "../app/map-config";
-import { SEOUL_TRANSIT_DARK_STYLE } from "../app/map-style";
+import { getSeoulTransitColors, SEOUL_TRANSIT_STYLES } from "../app/map-style";
+import type { MapTheme } from "../app/seoul-daylight";
 import { SEOUL_SUBWAY_OSM_NETWORK } from "../features/subway/osm-subway-network";
 import {
+  createSubwayVisualLevel,
   createSubwayDeckLayers,
   createSubwayDisplayStations,
+  createSubwayRoutePaths,
+  createSubwayStationCircles,
   type SubwayVisualLevel,
 } from "../features/subway/subway-paths";
 import type { SubwayStationMapPoint } from "../features/subway/subway-geojson";
@@ -19,24 +20,26 @@ import type { SubwayLineNumber } from "../features/subway/subway-constants";
 import type { SubwayLayerVisibility } from "../features/subway/subway-layer-visibility";
 import { SUBWAY_STATION_LABEL_LAYER_ID } from "../features/subway/subway-layer-ids";
 import { SeoulSubwayLayers } from "./seoul-subway-layers";
-import { SubwayTrainLayer } from "./subway-train-layer";
+import { DETAIL_START, DETAIL_END, PULSE_DETAIL_START } from "../features/subway/line-2-main-simulation";
+import { Line2Service } from "./line-2-service";
+import { Line2StationBoard } from "./line-2-station-board";
+import { line2StationName } from "../features/subway/line-2-station-board";
+import { getLine2StationDirections } from "../features/subway/line-2-timetable";
+import type { PulseStationRegion } from "../features/night-pulse/night-pulse-layer";
 
-// 현재는 선발대로 2호선 본선의 외선·내선 운행 경로만 열차 레이어에 전달한다.
-const LINE_2_MAIN_SERVICE_ROUTES = SEOUL_SUBWAY_OSM_NETWORK.serviceRoutes.filter(
-  (serviceRoute) =>
-    serviceRoute.lineNumber === 2 &&
-    (serviceRoute.direction === "outer-loop" ||
-      serviceRoute.direction === "inner-loop"),
-);
+const NightPulse = lazy(() => import("../features/night-pulse/night-pulse"));
+const EMPTY_LAYERS: LayersList = [];
+const SubwayFleetOverview = lazy(() => import("./subway-fleet-overview"));
 
 interface SeoulSubwayMapProps {
   selectedLineNumbers: SubwayLineNumber[];
   layerVisibility: SubwayLayerVisibility;
   visualLevel: SubwayVisualLevel;
   zoom: number;
-  isFollowingLine2Train: boolean;
+  theme: MapTheme;
+  pulse: boolean;
+  followOnMount: boolean;
   onZoomChange: (zoom: number) => void;
-  onStopFollowingLine2Train: () => void;
 }
 
 export function SeoulSubwayMap({
@@ -44,11 +47,25 @@ export function SeoulSubwayMap({
   layerVisibility,
   visualLevel,
   zoom,
-  isFollowingLine2Train,
+  theme,
+  pulse,
+  followOnMount,
   onZoomChange,
-  onStopFollowingLine2Train,
 }: SeoulSubwayMapProps) {
-  const mapReference = useRef<MapRef>(null);
+  const [initialStyle] = useState(() => SEOUL_TRANSIT_STYLES[theme]);
+  const [requestedTrain, setRequestedTrain] = useState<{ id: string | null } | null>(null);
+  const canShowLine2Trains = selectedLineNumbers.includes(2) && layerVisibility.isTrainLayerVisible;
+  useEffect(() => {
+    if (!canShowLine2Trains) setRequestedTrain(null);
+  }, [canShowLine2Trains]);
+  const [station, setStation] = useState<SubwayStationMapPoint | null>(null);
+  const stationRegions = useRef<PulseStationRegion[]>([]);
+  const onStationRegions = useCallback((regions: PulseStationRegion[]) => { stationRegions.current = regions; }, []);
+  const closeStation = useCallback(() => setStation(null), []);
+  const focusTrain = useCallback((train: { id: string | null }) => {
+    if (train.id !== null) setStation(null);
+    setRequestedTrain(train);
+  }, []);
   const visibleStations = useMemo(
     () => createVisibleSubwayStations(selectedLineNumbers),
     [selectedLineNumbers],
@@ -58,72 +75,111 @@ export function SeoulSubwayMap({
     () => createSubwayDisplayStations(visibleStations),
     [visibleStations],
   );
+  const line2Stations = useMemo(() => displayStations.filter(
+    candidate => candidate.lineNumber === 2 && getLine2StationDirections(line2StationName(candidate.name)),
+  ), [displayStations]);
+  const routePaths = useMemo(() => createSubwayRoutePaths(selectedLineNumbers), [selectedLineNumbers]);
+  const stationCircles = useMemo(() => createSubwayStationCircles(displayStations), [displayStations]);
   const subwayDeckLayers = useMemo(
     () =>
-      createSubwayDeckLayers(
-        selectedLineNumbers,
-        displayStations,
+      pulse ? EMPTY_LAYERS : createSubwayDeckLayers(
+        routePaths,
+        stationCircles,
         layerVisibility,
         visualLevel,
       ),
-    [displayStations, layerVisibility, selectedLineNumbers, visualLevel],
+    [routePaths, stationCircles, layerVisibility, visualLevel, pulse],
   );
-
-  useEffect(() => {
-    if (!isFollowingLine2Train) {
-      return;
-    }
-
-    const initialCoordinate = LINE_2_MAIN_SERVICE_ROUTES[0]?.path[0];
-
-    if (initialCoordinate === undefined) {
-      return;
-    }
-
-    mapReference.current?.jumpTo({
-      center: { lng: initialCoordinate[0], lat: initialCoordinate[1] },
-      zoom: 16,
-      pitch: 60,
-    });
-  }, [isFollowingLine2Train]);
 
   return (
     <Map
-      ref={mapReference}
       initialViewState={INITIAL_VIEW_STATE}
-      mapStyle={SEOUL_TRANSIT_DARK_STYLE}
+      mapStyle={initialStyle}
       style={{ width: "100%", height: "100%" }}
-      onMove={(event) => {
-        const nextZoom = Number(event.viewState.zoom.toFixed(2));
-
-        if (zoom !== nextZoom) {
+      onZoom={({ viewState }) => {
+        const nextZoom = viewState.zoom;
+        const trainLayerChanged = [DETAIL_START, DETAIL_END, PULSE_DETAIL_START].some((threshold) =>
+          (zoom < threshold) !== (nextZoom < threshold),
+        );
+        if (trainLayerChanged || (zoom > 13) !== (nextZoom > 13) || createSubwayVisualLevel(nextZoom) !== visualLevel) {
           onZoomChange(nextZoom);
         }
       }}
-      onDragStart={() => {
-        if (isFollowingLine2Train) {
-          onStopFollowingLine2Train();
+      onZoomEnd={({ viewState }) => onZoomChange(viewState.zoom)}
+      onClick={event => {
+        if (event.defaultPrevented || !line2Stations.length) return;
+        const { x, y } = event.point;
+        const map = event.target;
+        const byName = (name: string) => line2Stations.find(item => line2StationName(item.name) === line2StationName(name));
+        const features = map.getLayer(SUBWAY_STATION_LABEL_LAYER_ID)
+          ? map.queryRenderedFeatures(event.point, { layers: [SUBWAY_STATION_LABEL_LAYER_ID] })
+          : [];
+        // 환승역에서 지도에 남은 라벨이 다른 호선 소속이어도 같은 역의 전광판을 연다.
+        let picked = features.map(feature => byName(feature.properties.name)).find(Boolean);
+        if (!picked && layerVisibility.isStationCircleLayerVisible) {
+          if (pulse) {
+            const region = stationRegions.current.find(region =>
+              x >= region.x && x <= region.x + region.width && y >= region.y && y <= region.y + region.height,
+            );
+            if (region) picked = byName(region.name);
+          } else if (map.getZoom() > 12.4) {
+            let distance = 12;
+            for (const candidate of line2Stations) {
+              const point = map.project([candidate.longitude, candidate.latitude]);
+              const offset = Math.hypot(x - point.x, y - point.y);
+              if (offset < distance) { picked = candidate; distance = offset; }
+            }
+          }
         }
-      }}
-      onZoomStart={(event) => {
-        if (isFollowingLine2Train && event.originalEvent !== undefined) {
-          onStopFollowingLine2Train();
+        if (picked) {
+          event.preventDefault();
+          setStation(picked);
         }
       }}
     >
-      <SeoulSubwayLayers stations={displayStations} />
+      <MapThemeColors theme={theme} pulse={pulse} />
+      <SeoulSubwayLayers stations={displayStations} theme={theme} />
       <DeckRouteOverlay layers={subwayDeckLayers} />
-      <SubwayTrainLayer
-        isActive={
-          selectedLineNumbers.includes(2) &&
-          layerVisibility.isTrainLayerVisible &&
-          visualLevel.id === "inspection"
-        }
-        isFollowing={isFollowingLine2Train}
-        serviceRoutes={LINE_2_MAIN_SERVICE_ROUTES}
-      />
+      {pulse && <Suspense fallback={null}>
+        <NightPulse onStationRegions={onStationRegions} lines={selectedLineNumbers} stations={displayStations}
+          routes={routePaths}
+          showRoutes={layerVisibility.isRouteLayerVisible}
+          showStations={layerVisibility.isStationCircleLayerVisible}
+          showTrains={layerVisibility.isTrainLayerVisible} />
+      </Suspense>}
+      {selectedLineNumbers.length > 0 && layerVisibility.isTrainLayerVisible && (
+        <Suspense fallback={null}>
+          <SubwayFleetOverview selectedLines={selectedLineNumbers} onLine2Focus={focusTrain} pulse={pulse} />
+        </Suspense>
+      )}
+      {canShowLine2Trains && (
+        <Line2Service zoom={zoom} requestedTrain={requestedTrain} pulse={pulse}
+          boardOpen={station !== null} onInspect={closeStation} followOnMount={followOnMount} />
+      )}
+      {station && selectedLineNumbers.includes(2) && <Line2StationBoard station={station} name={line2StationName(station.name)}
+        showTrains={layerVisibility.isTrainLayerVisible} onClose={closeStation} />}
     </Map>
   );
+}
+
+function MapThemeColors({ theme, pulse }: { theme: MapTheme; pulse: boolean }) {
+  const { current: mapReference } = useMap();
+  useEffect(() => {
+    const map = mapReference?.getMap();
+    if (!map) return;
+    const apply = () => {
+      for (const { layerId, property, value } of getSeoulTransitColors(theme)) {
+        if (map.getLayer(layerId) && map.getPaintProperty(layerId, property) !== value) {
+          map.setPaintProperty(layerId, property, value);
+        }
+      }
+    };
+    apply();
+    if (pulse) return attachNightPulseStyle(map);
+    map.on("style.load", apply);
+    return () => { map.off("style.load", apply); };
+  }, [mapReference, theme, pulse]);
+  return null;
 }
 
 interface DeckRouteOverlayProps {
@@ -135,6 +191,8 @@ function DeckRouteOverlay({ layers }: DeckRouteOverlayProps) {
   const overlay = useControl(
     () => new MapboxOverlay({ interleaved: true, layers: [] }),
   );
+  // 재마운트 시 역 라벨이 준비되기 전 이전 레이어가 붙는 것을 막는다.
+  useEffect(() => () => overlay.setProps({ layers: [] }), [overlay]);
 
   useEffect(() => {
     const map = mapReference?.getMap();
@@ -143,11 +201,13 @@ function DeckRouteOverlay({ layers }: DeckRouteOverlayProps) {
       return;
     }
 
+    let applied = false;
     const updateRouteLayers = () => {
-      if (map.getLayer(SUBWAY_STATION_LABEL_LAYER_ID) === undefined) {
+      if (applied || map.getLayer(SUBWAY_STATION_LABEL_LAYER_ID) === undefined) {
         return;
       }
 
+      applied = true;
       overlay.setProps({ layers });
     };
 
@@ -158,7 +218,6 @@ function DeckRouteOverlay({ layers }: DeckRouteOverlayProps) {
     return () => {
       map.off("styledata", updateRouteLayers);
       map.off("idle", updateRouteLayers);
-      overlay.setProps({ layers: [] });
     };
   }, [layers, mapReference, overlay]);
 

@@ -5,7 +5,7 @@ const SNAP_DISTANCE_DEGREES = 1e-9;
 
 export interface SubwayTrainCameraFollower {
   next: (
-    target: SubwayCoordinate,
+    target: Readonly<SubwayCoordinate>,
     timestampMilliseconds: number,
   ) => SubwayCoordinate;
   reset: () => void;
